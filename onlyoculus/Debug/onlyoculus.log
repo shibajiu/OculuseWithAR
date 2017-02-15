@@ -1,0 +1,5 @@
+﻿  onlyoculus.cpp
+d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(121): warning C4838: conversion from 'double' to 'int' requires a narrowing conversion
+d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(121): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+  onlyoculus.vcxproj -> D:\MyProjects\onlyoculus\Debug\onlyoculus.exe
+  onlyoculus.vcxproj -> D:\MyProjects\onlyoculus\Debug\onlyoculus.pdb (Full PDB)
