@@ -1,2 +1,12 @@
-﻿  onlyoculus.vcxproj -> D:\MyProjects\onlyoculus\x64\Debug\onlyoculus.exe
+﻿  onlyoculus.cpp
+d:\projects\source\opencv\build\include\opencv2\core\mat.hpp(2586): warning C4819: The file contains a character that cannot be represented in the current code page (936). Save the file in Unicode format to prevent data loss
+d:\projects\source\opencv\build\include\opencv2\core\persistence.hpp : warning C4819: The file contains a character that cannot be represented in the current code page (936). Save the file in Unicode format to prevent data loss
+d:\projects\source\opencv\build\include\opencv2\core\utility.hpp : warning C4819: The file contains a character that cannot be represented in the current code page (936). Save the file in Unicode format to prevent data loss
+d:\projects\source\opencv\build\include\opencv2\core\utility.hpp : warning C4819: The file contains a character that cannot be represented in the current code page (936). Save the file in Unicode format to prevent data loss
+d:\projects\source\opencv\build\include\opencv2\imgproc.hpp(592): warning C4819: The file contains a character that cannot be represented in the current code page (936). Save the file in Unicode format to prevent data loss
+d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(163): warning C4838: conversion from 'double' to 'int' requires a narrowing conversion
+d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(163): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(352): warning C4800: 'ovrTextureSwapChain': forcing value to bool 'true' or 'false' (performance warning)
+cl : Command line warning D9028: minimal rebuild failure, reverting to normal build
+  onlyoculus.vcxproj -> D:\MyProjects\onlyoculus\x64\Debug\onlyoculus.exe
   onlyoculus.vcxproj -> D:\MyProjects\onlyoculus\x64\Debug\onlyoculus.pdb (Full PDB)

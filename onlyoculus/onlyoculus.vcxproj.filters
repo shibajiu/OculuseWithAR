@@ -33,6 +33,15 @@
     <ClInclude Include="loadwinthAssimp.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Tree.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="KalmanFilter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ovrrs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -47,11 +56,19 @@
     <ClCompile Include="loadwithAssimp.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Tree.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ovrrs.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="cast.frag" />
     <None Include="cast.vert" />
     <None Include="skybox.frag" />
     <None Include="skybox.vert" />
+    <None Include="ar.frag" />
+    <None Include="ar.vert" />
   </ItemGroup>
 </Project>

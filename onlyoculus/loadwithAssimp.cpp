@@ -33,6 +33,21 @@ void Mesh::setupMesh() {
 	glBindVertexArray(0);
 }
 
+void A_model::CheckMaxAndMin(glm::vec3 newVec3) {
+	if (v3Max.x < newVec3.x)
+		v3Max.x = newVec3.x;
+	if (v3Max.y < newVec3.y)
+		v3Max.y = newVec3.y;
+	if (v3Max.z < newVec3.z)
+		v3Max.z = newVec3.z;
+	if (v3Min.x > newVec3.x)
+		v3Min.x = newVec3.x;
+	if (v3Min.y > newVec3.y)
+		v3Min.y = newVec3.y;
+	if (v3Min.z > newVec3.z)
+		v3Min.z = newVec3.z;
+}
+
 void A_model::load_model(string _path) {
 	Assimp::Importer importer;
 	auto scene = importer.ReadFile(_path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals);
@@ -43,8 +58,10 @@ void A_model::load_model(string _path) {
 	this->directory = _path.substr(0, _path.find_last_of('/'));
 	this->processNode(scene->mRootNode, scene);
 	mVAOs = new GLuint[nMeshNum];
+	mElementCount = new GLuint[nMeshNum];
 	for (int i = 0; i < nMeshNum; ++i) {
 		mVAOs[i] = meshes[i].VAO;
+		mElementCount[i] = meshes[i].indices.size();
 	}
 	cout << "Total meshes:" << nMeshNum << endl;
 }
@@ -66,6 +83,8 @@ Mesh A_model::processMesh(aiMesh* _aimesh, const aiScene* _scene) {
 	vector<_L_Vertex>	_vertices(_aimesh->mNumVertices);
 	vector<_L_Texture>	_textures;
 	vector<_L_U_INT>	_indices;
+	v3Max = glm::vec3(0);
+	v3Min = glm::vec3(0);
 
 	for (int i = 0; i < _aimesh->mNumVertices; ++i) {
 		glm::vec3 _v;
@@ -73,6 +92,7 @@ Mesh A_model::processMesh(aiMesh* _aimesh, const aiScene* _scene) {
 		_v.y = _aimesh->mVertices[i].y;
 		_v.z = _aimesh->mVertices[i].z;
 		_vertices[i].Position = _v;
+		CheckMaxAndMin(_v);
 		_v.x = _aimesh->mNormals[i].x;
 		_v.y = _aimesh->mNormals[i].y;
 		_v.z = _aimesh->mNormals[i].z;
@@ -86,6 +106,10 @@ Mesh A_model::processMesh(aiMesh* _aimesh, const aiScene* _scene) {
 		else
 			_vertices[i].TexCoords = glm::vec2(0, 0);
 	}
+	vMax.push_back(v3Max);
+	vMin.push_back(v3Min);
+	vCenter.push_back(0.5f*(v3Max + v3Min));
+
 	for (int i = 0; i < _aimesh->mNumFaces; ++i) {
 		auto face = _aimesh->mFaces[i];
 		for (int j = 0; j < face.mNumIndices; ++j)

@@ -39,10 +39,11 @@ private:
 	_L_U_INT VAO, VBO, EBO;
 
 	void setupMesh();
-
 public:
 	Mesh() {}
-	Mesh::Mesh(vector<_L_Vertex> _ve, vector<_L_Texture>_te, vector<_L_U_INT>_in) {
+	Mesh::Mesh(vector<_L_Vertex> _ve,
+		vector<_L_Texture>_te,
+		vector<_L_U_INT>_in){
 		this->vertices = _ve;
 		this->textures = _te;
 		this->indices = _in;
@@ -62,22 +63,32 @@ private:
 	vector<Mesh> meshes;
 	vector<_L_Texture>_loaded;
 	string directory;
-	
+
 	void load_model(string);
 	void processNode(aiNode*, const aiScene*);
 	Mesh processMesh(aiMesh*, const aiScene*);
 	vector<_L_Texture> loadMaterialTextures(aiMaterial*, aiTextureType, string);
 	_L_U_INT TextureFromFile(const char*, string);
+	void CheckMaxAndMin(glm::vec3 newVec3);
+	glm::vec3 v3Max, v3Min;
 
 public:
 	int nMeshNum = 0;
 	GLuint * mVAOs;
+	GLuint * mElementCount;
+	vector<glm::vec3> vMax, vMin, vCenter;
 
 	A_model(char* _path) {
 		load_model(_path);
 	}
 	~A_model() {
-		
+		delete[] mVAOs;
+		delete[] mElementCount;
+		vMax.clear();
+		vMin.clear();
+		vCenter.clear();
+		meshes.clear();
+		_loaded.clear();
 	}
 };
 
