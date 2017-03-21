@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "loadwinthAssimp.h"
 
+#include <io.h>
+
 //using namespace glm;
 
 void Mesh::setupMesh() {
@@ -48,6 +50,56 @@ void A_model::CheckMaxAndMin(glm::vec3 newVec3) {
 		v3Min.z = newVec3.z;
 }
 
+void A_model::CheckMaxAndMin(glm::vec3 newVec3, glm::vec3 & dest_min, glm::vec3 & dest_max) {
+	if (dest_max.x < newVec3.x)
+		dest_max.x = newVec3.x;
+	if (dest_max.y < newVec3.y)
+		dest_max.y = newVec3.y;
+	if (dest_max.z < newVec3.z)
+		dest_max.z = newVec3.z;
+	if (dest_min.x > newVec3.x)
+		dest_min.x = newVec3.x;
+	if (dest_min.y > newVec3.y)
+		dest_min.y = newVec3.y;
+	if (dest_min.z > newVec3.z)
+		dest_min.z = newVec3.z;
+}
+
+vector<string> A_model::get_obj_from_path64(_In_ string filepath) {
+	__int64 hFile = 0;
+	__finddata64_t fileinfo;
+	var _fp = filepath;
+	vector<string> _o;
+	if ((hFile=_findfirst64(_fp.append("\\*.obj").c_str(), &fileinfo)) != -1) {
+		_o.push_back((_fp.assign(filepath).append("\\")).append(fileinfo.name));
+		while (_findnext64(hFile, &fileinfo) == 0) {
+			_o.push_back((_fp.assign(filepath).append("\\")).append(fileinfo.name));
+		}
+		_findclose(hFile);
+	}
+
+	return _o;
+}
+
+map<int, S3DColorName> A_model::LoadColor_s(const char * path) {
+	map<int, S3DColorName> _o;
+	ifstream ifs(path);
+	char _t[512];
+	while (!ifs.eof()) {
+		ifs.getline(_t, 512);
+		if (_t[0] == '#') {
+			continue;
+		}
+		else {
+			int _idx;
+			S3DColorName _cn = {};
+			sscanf_s(_t, "%d %s %d %d %d %d", &_idx, _cn.name, sizeof(_cn.name), &_cn.r, &_cn.g, &_cn.b, &_cn.a);
+			_o.insert(pair<int,S3DColorName>(_idx, _cn));
+		}
+	}
+	return _o;
+}
+
 void A_model::load_model(string _path) {
 	Assimp::Importer importer;
 	auto scene = importer.ReadFile(_path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals);
@@ -83,8 +135,8 @@ Mesh A_model::processMesh(aiMesh* _aimesh, const aiScene* _scene) {
 	vector<_L_Vertex>	_vertices(_aimesh->mNumVertices);
 	vector<_L_Texture>	_textures;
 	vector<_L_U_INT>	_indices;
-	v3Max = glm::vec3(0);
-	v3Min = glm::vec3(0);
+	v3Max = glm::vec3(_aimesh->mVertices[0].x, _aimesh->mVertices[0].y, _aimesh->mVertices[0].z);
+	v3Min = v3Max;
 
 	for (int i = 0; i < _aimesh->mNumVertices; ++i) {
 		glm::vec3 _v;

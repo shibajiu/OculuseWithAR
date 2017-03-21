@@ -58,13 +58,17 @@ public:
 
 };
 
+struct S3DColorName {
+	int r, g, b, a;
+	char name[512];
+};
+
 class A_model {
 private:
 	vector<Mesh> meshes;
 	vector<_L_Texture>_loaded;
 	string directory;
 
-	void load_model(string);
 	void processNode(aiNode*, const aiScene*);
 	Mesh processMesh(aiMesh*, const aiScene*);
 	vector<_L_Texture> loadMaterialTextures(aiMaterial*, aiTextureType, string);
@@ -78,7 +82,13 @@ public:
 	GLuint * mElementCount;
 	vector<glm::vec3> vMax, vMin, vCenter;
 
-	A_model(char* _path) {
+	static void CheckMaxAndMin(glm::vec3 newVec3,glm::vec3 &dest_min,  glm::vec3 &dest_max);
+	static vector<string> get_obj_from_path64(string);
+	static map<int, S3DColorName> LoadColor_s(const char*);
+	void load_model(string);
+
+	A_model() {}
+	A_model(const char* _path) {
 		load_model(_path);
 	}
 	~A_model() {

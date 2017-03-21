@@ -42,6 +42,12 @@
     <ClInclude Include="ovrrs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ovrrslog.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="define.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -62,6 +68,9 @@
     <ClCompile Include="ovrrs.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ovrrslog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="cast.frag" />
@@ -70,5 +79,8 @@
     <None Include="skybox.vert" />
     <None Include="ar.frag" />
     <None Include="ar.vert" />
+    <None Include="hf.glsl" />
+    <None Include="hg.glsl" />
+    <None Include="hv.glsl" />
   </ItemGroup>
 </Project>

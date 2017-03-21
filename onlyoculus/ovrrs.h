@@ -7,6 +7,10 @@
 #include <glm/gtc/quaternion.hpp>
 #include "Tree.h"
 #include <vector>
+#include <array>
+
+using namespace std;
+
 #define IFCERR(b,msg) if(b){cerr<<msg<<endl;return;} 
 #define PXCIFERR(b,msg) IFCERR(b<pxcStatus::PXC_STATUS_NO_ERROR,msg)
 #define MAX_NUMBER_OF_JOINTS 22
@@ -17,6 +21,7 @@ class ovrUXEventHandler;
 class ovrAlertHandler;
 class ovrHandAlertHandler;
 class HandsModel;
+struct JointPositionSpeed;
 
 class ovrrs_tc {
 private:
@@ -98,7 +103,10 @@ public:
 	int Start();
 	int Stop();
 	glm::vec3 GetWristOrientation();
-	glm::vec3* GetJointPoints();
+	JointPositionSpeed* GetJointPoints();
+	int GetLogCount();
+	const vector<array<glm::vec3, 3>>& GetLog_p() const;
+	const vector<array<glm::vec3, 3>>& GetLog_s() const;
 	void Release();
 	~ovrrs_fh();
 };
@@ -108,14 +116,24 @@ public:
 	virtual void PXCAPI OnFiredAlert(const PXCHandData::AlertData &_d);
 };
 
+struct JointPositionSpeed {
+	glm::vec3 position;
+	glm::vec3 speed;
+
+	JointPositionSpeed():position(0),speed(0){}
+};
+
 class HandsModel {
 private:
 	friend class ovrrs_fh;
+	int HandCount;
+	vector<array<glm::vec3, 3>> handlog_p;
+	vector<array<glm::vec3, 3>> handlog_s;
 	Tree<PointData>* skeletontree;
 	PXCHandData* handdata;
 	bool righthand = false, lefthand = false;
 	//vec3* jointpoints=new vec3[MAX_NUMBER_OF_JOINTS];
-	glm::vec3 *jointpoints_t = new glm::vec3[MAX_NUMBER_OF_JOINTS];;
+	JointPositionSpeed *jointpoints_t = new JointPositionSpeed[MAX_NUMBER_OF_JOINTS];
 
 	void copyJointToPoint(PointData & dst, const PXCHandData::JointData & src);
 	//void copyJointTopoint()
@@ -125,6 +143,6 @@ public:
 	~HandsModel();
 	void updateskeletonTree();
 	glm::vec3 PXCPoint3DF32_to_vec3(PXCPoint3DF32 _p) const;
-	glm::vec3* GetPoint();
+	JointPositionSpeed* GetPoint();
 	void Release();
 };

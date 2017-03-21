@@ -162,10 +162,12 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="define.h" />
     <ClInclude Include="KalmanFilter.h" />
     <ClInclude Include="loadwinthAssimp.h" />
     <ClInclude Include="OvrGLItems.h" />
     <ClInclude Include="ovrrs.h" />
+    <ClInclude Include="ovrrslog.h" />
     <ClInclude Include="SDLGL.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
@@ -175,6 +177,7 @@
     <ClCompile Include="loadwithAssimp.cpp" />
     <ClCompile Include="onlyoculus.cpp" />
     <ClCompile Include="ovrrs.cpp" />
+    <ClCompile Include="ovrrslog.cpp" />
     <ClCompile Include="SDLGL.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
@@ -189,6 +192,9 @@
     <None Include="ar.vert" />
     <None Include="cast.frag" />
     <None Include="cast.vert" />
+    <None Include="hf.glsl" />
+    <None Include="hg.glsl" />
+    <None Include="hv.glsl" />
     <None Include="skybox.frag" />
     <None Include="skybox.vert" />
   </ItemGroup>

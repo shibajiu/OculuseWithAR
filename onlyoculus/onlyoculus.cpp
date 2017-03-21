@@ -6,6 +6,7 @@
 #include "loadwinthAssimp.h"
 #include "KalmanFilter.h"
 #include "ovrrs.h"
+#include "ovrrslog.h"
 
 //cv part
 #include <opencv2/core.hpp>
@@ -19,6 +20,10 @@
 #pragma comment(lib, "dxgi.lib")
 #endif
 
+#define PROPORTION 0.75
+#define EYELOCATION 10
+#define MINFOVTANGENT 1.05865765
+
 using namespace std;
 
 SDLGL *gl = nullptr;
@@ -29,6 +34,12 @@ int offset = 200;
 glm::vec3 handpos;
 ovrrs_fh *rsf;
 KalmanFilter<glm::vec3> *kal;
+static vector<array<glm::vec3, 3>> handlog_p;
+static vector<array<glm::vec3,3>> handlog_s;
+bool isLog = false;
+bool isLoadModels = true;
+Operation current_opr = Operation::NONE, last_opr = Operation::NONE;
+GLfloat model_thickness(0), model_width(1);
 
 GLfloat skyboxVertices[] = {
 	// Positions          
@@ -138,6 +149,33 @@ static int Compare(const ovrGraphicsLuid& lhs, const ovrGraphicsLuid& rhs) {
 	return memcmp(&lhs, &rhs, sizeof(ovrGraphicsLuid));
 }
 
+void SDL_Handel_KeyEvent(SDL_Keysym* keysys) {
+	switch (keysys->sym) {
+	case SDLK_d:
+		last_opr = current_opr;
+		current_opr = Operation::DISPLACEMENT;
+		cout << "Displacement Mode" << endl;
+		break;
+	case SDLK_r:
+		last_opr = current_opr;
+		current_opr = Operation::ROTATION;
+		cout << "Rotation Mode" << endl;
+		break;
+	case SDLK_s:
+		last_opr = current_opr;
+		current_opr = Operation::SCALE;
+		cout << "Scale Mode" << endl;
+		break;
+	case SDLK_q:
+		last_opr = current_opr;
+		current_opr = Operation::DISPLAY;
+		cout << "Display Mode" << endl;
+		break;
+	default:
+		break;
+	}
+}
+
 void Display() {
 	
 }
@@ -235,8 +273,46 @@ bool MainLoop() {
 	}
 #endif // AR_TEST
 #endif // !CVCAP
+	glm::vec3 _center(0), _max(0), _min(0);
+	var objfiles = A_model::get_obj_from_path64("D:\\models\\objs");
+	var colorfile = A_model::LoadColor_s("D:\\models\\objs\\anat_labels.txt");
+	A_model *models = new A_model[objfiles.size()];
+	S3DColorName *modelcolor = new S3DColorName[objfiles.size()];
 
-	A_model CastleModel("d:/castle.obj");
+	if (isLoadModels) {
+		//vector<A_model> models(objfiles.size());
+		bool _isFirstMax = true;
+		for (int i = 0; i < objfiles.size(); ++i) {
+			var _objname = objfiles[i].substr(objfiles[i].find_last_of('\\') + 1);
+			int _idx;
+			sscanf_s(_objname.c_str(), "%*6s%d%*s", &_idx);
+			var _itr = colorfile.find(_idx);
+			if (_itr == colorfile.end()) {
+				cerr << "Color ERR" << endl;
+			}
+			else {
+				modelcolor[i] = colorfile[_idx];
+			}
+			cout << _objname << endl;
+			models[i].load_model(objfiles[i].c_str());
+			if (_isFirstMax) {
+				_max = models[0].vMax[0];
+				_min = models[0].vMin[0];
+			}
+			for (int _m = 0; _m < models[i].nMeshNum; ++_m) {
+				A_model::CheckMaxAndMin(models[i].vMax[_m], _min, _max);
+				A_model::CheckMaxAndMin(models[i].vMin[_m], _min, _max);
+			}
+		}
+		_center = (_max + _min)*0.5f;
+		model_width = _max.x - _min.x;
+		model_thickness = _max.z - _min.z;
+		cout << "ALL LOADED" << endl;
+	}
+	//A_model CastleModel("d:/castle.obj");
+	/*var aaa = objfiles[0];
+	A_model CastleModel(objfiles[0].c_str());*/
+
 	var PRG_castle = SDLGL::LoadShader_sdl_s("cast.vert", "cast.frag");
 	var PRG_skybox = SDLGL::LoadShader_sdl_s("skybox.vert", "skybox.frag");
 	var PRG_hand = SDLGL::LoadShader_sdl_s("hv.glsl", "hg.glsl", "hf.glsl");
@@ -266,9 +342,9 @@ bool MainLoop() {
 	glBindVertexArray(VAO_hand);
 	glGenBuffers(1, &VBO_hand);
 	glBindBuffer(GL_ARRAY_BUFFER, VBO_hand);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3)*MAX_NUMBER_OF_JOINTS, &_ve[0], GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(JointPositionSpeed)*MAX_NUMBER_OF_JOINTS, &_ve[0].position, GL_STATIC_DRAW);
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(glm::vec3), 0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(JointPositionSpeed), (void*)offsetof(JointPositionSpeed,position));
 	glBindVertexArray(0);
 
 
@@ -376,16 +452,30 @@ bool MainLoop() {
 	glEnable(GL_DEPTH_TEST);
 	glClearColor(0, 0, 0, 0);
 	bool quit = false;
-	static glm::mat4 model(1);
+	if (isLoadModels) {
+		GLfloat scale = (2 * PROPORTION*EYELOCATION*MINFOVTANGENT) / (model_width + PROPORTION*model_thickness*MINFOVTANGENT);
+		GLfloat scale2 = 0.5*EYELOCATION / model_thickness;
+		scale = glm::min(scale, scale2);
+		var light_dir = glm::normalize(glm::vec3(-1, 1, -1));
+		var mat_center = glm::translate(-_center);
+		var mat_center_reverse = glm::translate(_center);
+		var mat_scale = glm::scale(glm::vec3(scale));
+		glProgramUniform3fv(PRG_castle, glGetUniformLocation(PRG_castle, "light_dir"), 1, &light_dir.x);
+		glProgramUniformMatrix4fv(PRG_castle, glGetUniformLocation(PRG_castle, "mat_center"), 1, false, glm::value_ptr(mat_center));
+		glProgramUniformMatrix4fv(PRG_castle, glGetUniformLocation(PRG_castle, "mat_scale"), 1, false, glm::value_ptr(mat_scale));
+		glProgramUniformMatrix4fv(PRG_castle, glGetUniformLocation(PRG_castle, "mat_center_reverse"), 1, false, glm::value_ptr(mat_center_reverse));
 
-	var light_dir = glm::normalize(glm::vec3(-1, 1, -1));
-	glProgramUniform3fv(PRG_castle, glGetUniformLocation(PRG_castle, "light_dir"), 1, &light_dir.x);
+	}
 
+	glm::mat4 final_model(1), last_model(1);
 	while (!quit) {
 		while (SDL_PollEvent(&event)) {
 			switch (event.type) {
 			case SDL_QUIT:
 				quit = true;
+				break;
+			case SDL_KEYDOWN:
+				SDL_Handel_KeyEvent(&event.key.keysym);
 				break;
 			default:
 				break;
@@ -407,8 +497,10 @@ bool MainLoop() {
 			cv::flip(frame, flipmat, 0);
 #endif // CVCAP
 
-			static float Yaw(3.141592f);
-			static Vector3f Pos2(0.0f, 0.0f, -8.0f);
+			static float Yaw(0);
+			static Vector3f Pos2(0.0f, 0.0f, EYELOCATION);
+			static int handcount = 0;
+			
 			// Call ovr_GetRenderDesc each frame to get the ovrEyeRenderDesc, as the returned values (e.g. HmdToEyeOffset) may change at runtime.
 			ovrEyeRenderDesc eyeRenderDesc[2];
 			eyeRenderDesc[0] = ovr_GetRenderDesc(session, ovrEye_Left, hmdDesc.DefaultEyeFov[0]);
@@ -418,7 +510,10 @@ bool MainLoop() {
 			ovrPosef                  EyeRenderPose[2];
 			ovrVector3f               HmdToEyeOffset[2] = { eyeRenderDesc[0].HmdToEyeOffset,
 				eyeRenderDesc[1].HmdToEyeOffset };
-
+			static int loop = 0;
+			if (++loop > 100) {
+				loop = 0;
+			}
 			double sensorSampleTime;    // sensorSampleTime is fed into the layer later
 			ovr_GetEyePoses(session, frameIndex, ovrTrue, HmdToEyeOffset, EyeRenderPose, &sensorSampleTime);
 			for (int eye = 0; eye < 2; ++eye) {
@@ -431,7 +526,6 @@ bool MainLoop() {
 				Vector3f finalUp = finalRollPitchYaw.Transform(Vector3f(0, 1, 0));
 				Vector3f finalForward = finalRollPitchYaw.Transform(Vector3f(0, 0, -1));
 				Vector3f shiftedEyePos = Pos2 + rollPitchYaw.Transform(EyeRenderPose[eye].Position);
-
 				Matrix4f view = Matrix4f::LookAtRH(shiftedEyePos, shiftedEyePos + finalForward, finalUp);
 				Matrix4f proj = ovrMatrix4f_Projection(hmdDesc.DefaultEyeFov[eye], 0.2f, 1000.0f, ovrProjection_None);
 
@@ -443,24 +537,80 @@ bool MainLoop() {
 				glUniformMatrix4fv(glGetUniformLocation(PRG_hand, "mat_projection"), 1, GL_TRUE, (float*)&proj.M[0]);
 				glBindVertexArray(VAO_hand);
 				_ve = rsf->GetJointPoints();
-				glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLfloat)*MAX_NUMBER_OF_JOINTS * 3, &_ve[0]);
+				var _rotate = glm::rotate(-_ve[1].position.x, glm::vec3(0, 1, 0));
+				static GLuint time = 0;
+
+				if (isLog) {
+					if (time == 0) {
+						time = SDL_GetTicks();
+					}
+					if (rsf->GetLogCount() >= 1500) {
+						isLog = false;
+						time = SDL_GetTicks() - time;
+						cout << "Writing...(" << time << ")" << endl;
+						::WriteLogWithSpeed(rsf->GetLog_p(), rsf->GetLog_s());
+					}
+				}
+
+				/*if (isLog) {
+					if (handcount < 3000) {
+						if (time == 0) {
+							time = SDL_GetTicks();
+						}
+						array<glm::vec3, 3> _tlog_p = { _ve[0].position,_ve[1].position,_ve[2].position };
+						array<glm::vec3, 3> _tlog_s = { _ve[0].speed,_ve[1].speed,_ve[2].speed };
+						handlog_p.push_back(_tlog_p);
+						handlog_s.push_back(_tlog_s);
+						cout << "Recording:" << handcount
+							<< "\t" << _ve[0].position.x
+							<< "\t" << _ve[0].position.y
+							<< "\t" << _ve[0].position.z
+							<< endl;
+						handcount += 1;
+					}
+					else if (handcount == 3000) {
+						handcount += 1;
+						time = SDL_GetTicks() - time;
+						cout << "Writing...(" << time << ")" << endl;
+						::WriteLogWithSpeed(handlog_p, handlog_s);
+					}
+				}*/
+				glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(JointPositionSpeed)*MAX_NUMBER_OF_JOINTS, &_ve[0]);
 				glDrawArrays(GL_POINTS, 0, MAX_NUMBER_OF_JOINTS);
 				glBindVertexArray(0);
 				glUseProgram(0);
-
-				glUseProgram(PRG_castle);
-				for (int i = 0; i < CastleModel.nMeshNum; ++i) {
-					model = glm::translate(-CastleModel.vCenter[i]);
-					glBindVertexArray(CastleModel.mVAOs[i]);
-					glUniform3fv(glGetUniformLocation(PRG_castle, "viewPos"), 1, &shiftedEyePos.x);
-					glUniformMatrix4fv(glGetUniformLocation(PRG_castle, "mat_model"), 1, GL_FALSE, glm::value_ptr(model));
-					//ovrmath use row-major order
-					glUniformMatrix4fv(glGetUniformLocation(PRG_castle, "mat_view"), 1, GL_TRUE, (float*)&view.M[0]);
-					glUniformMatrix4fv(glGetUniformLocation(PRG_castle, "mat_projection"), 1, GL_TRUE, (float*)&proj.M[0]);
-					glDrawElements(GL_TRIANGLES, CastleModel.mElementCount[i], GL_UNSIGNED_INT, 0);
-					glBindVertexArray(0);
+				if (isLoadModels) {
+					switch (current_opr) {
+					case Operation::ROTATION:
+					{
+						var _orientation = _ve[1].position - _ve[0].position;
+						_orientation = glm::vec3(-1, 1, 1)*_orientation;
+						final_model = SDLGL::GetRotationMatrixFromVec3(glm::vec3(0, 1, 0), _orientation)*last_model;
+						break;
+					}
+					default:
+						break;
+					}
+					//glm::mat4 model = glm::translate(glm::vec3(0, 0, loop / 10.f));
+					glUseProgram(PRG_castle);
+					for (int _n = 0; _n < objfiles.size(); _n++) {
+						for (int i = 0; i < models[_n].nMeshNum; ++i) {
+							glBindVertexArray(models[_n].mVAOs[i]);
+							GLfloat _r = modelcolor[_n].r / 255.f;
+							GLfloat _g = modelcolor[_n].g / 255.f;
+							GLfloat _b = modelcolor[_n].b / 255.f;
+							glUniform3f(glGetUniformLocation(PRG_castle, "model_color"), _r, _g, _b);
+							glUniform3fv(glGetUniformLocation(PRG_castle, "view_pos"), 1, &shiftedEyePos.x);
+							glUniformMatrix4fv(glGetUniformLocation(PRG_castle, "mat_model"), 1, GL_FALSE, glm::value_ptr(final_model));
+							//ovrmath use row-major order
+							glUniformMatrix4fv(glGetUniformLocation(PRG_castle, "mat_view"), 1, GL_TRUE, (float*)&view.M[0]);
+							glUniformMatrix4fv(glGetUniformLocation(PRG_castle, "mat_projection"), 1, GL_TRUE, (float*)&proj.M[0]);
+							glDrawElements(GL_TRIANGLES, models[_n].mElementCount[i], GL_UNSIGNED_INT, 0);
+							glBindVertexArray(0);
+						}
+					}
+					glUseProgram(0);
 				}
-				glUseProgram(0);
 
 				//Render part
 				glDepthFunc(GL_LEQUAL);

@@ -173,6 +173,46 @@ void SDLGL::LoadShader_sdl(const char * _vpath, const char * _fpath) {
 
 }
 
+glm::mat4 SDLGL::GetRotationMatrixFromVec3(glm::vec3 src, glm::vec3 dest) {
+	glm::mat4 _r(1);
+	if ((src.x == 0 &&
+		src.y == 0 &&
+		src.z == 0) ||
+		(dest.x == 0 &&
+			dest.y == 0 &&
+			dest.z == 0))
+		return _r;
+	src = glm::normalize(src);
+	dest = glm::normalize(dest);
+	var _iv = glm::dot(src, dest);
+	if (glm::length(src + dest) > 0.02) {
+		if (_iv > 0.98) {
+			cerr << "Same Direction" << endl;
+		}
+		else {
+			var _axis = glm::normalize(glm::cross(src, dest));
+			var _rad = glm::acos(_iv);
+			cout << "radiant:" << _rad << endl;
+			var _s = glm::cos(0.5*_rad);
+			var _v = ((float)glm::sin(0.5*_rad))*_axis;
+			var _quat = glm::quat(_s, _v);
+			_r = std::move(glm::toMat4(_quat));
+		}
+	}
+	else {
+		var _axis = glm::normalize(glm::cross(src, glm::vec3(0,0,1)));
+		if (glm::length(_axis) < 0.02) {
+			_axis = glm::cross(src, glm::vec3(0, 1, 0));
+		}
+		var _s = glm::cos(glm::radians(90.f));
+		cout << "almost parallel" << endl;
+		var _v = ((float)glm::sin(glm::radians(90.f)))*_axis;
+		var _quat = glm::quat(_s, _v);
+		_r = std::move(glm::toMat4(_quat));
+	}
+	return _r;
+}
+
 GLuint SDLGL::CreatCubeMap_s(CubePaths cp) {
 	GLuint _tid;
 	glGenTextures(1, &_tid);

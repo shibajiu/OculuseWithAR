@@ -18,10 +18,12 @@
 #include <fstream>
 #include <vector>
 #include <map>
+#include <array>
 
 // TODO: reference additional headers your program requires here
 #include <OVR_CAPI_GL.h>
 #include "GL/glew.h"
+#include "define.h"
 #ifndef var
 #define var auto
 #endif // !var

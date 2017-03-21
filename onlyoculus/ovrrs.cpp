@@ -140,6 +140,8 @@ void ovrrs_fh::init() {
 	var config = hand->CreateActiveConfiguration();
 	config->EnableStabilizer(true);
 	config->SubscribeAlert(alert);
+	//config->EnableJointSpeed(PXCHandData::JointType::JOINT_WRIST, PXCHandData::JointSpeedType::JOINT_SPEED_AVERAGE, 0);
+	config->EnableJointSpeed(PXCHandData::JointType::JOINT_CENTER, PXCHandData::JointSpeedType::JOINT_SPEED_AVERAGE, 0);
 	config->SetTrackingMode(PXCHandData::TrackingModeType::TRACKING_MODE_FULL_HAND);
 	config->EnableSegmentationImage(false);
 	config->EnableTrackedJoints(true);
@@ -207,8 +209,20 @@ glm::vec3 ovrrs_fh::GetWristOrientation() {
 	return orientation;
 }
 
-glm::vec3* ovrrs_fh::GetJointPoints() {
+JointPositionSpeed* ovrrs_fh::GetJointPoints() {
 	return handsmodel->GetPoint();
+}
+
+int ovrrs_fh::GetLogCount() {
+	return handsmodel->HandCount;
+}
+
+const vector<array<glm::vec3, 3>>& ovrrs_fh::GetLog_p() const {
+	return handsmodel->handlog_p;
+}
+
+const vector<array<glm::vec3, 3>>& ovrrs_fh::GetLog_s() const {
+	return handsmodel->handlog_s;
 }
 
 void ovrrs_fh::Release() {
@@ -219,7 +233,7 @@ ovrrs_fh::~ovrrs_fh() {
 	Release();
 }
 
-HandsModel::HandsModel(PXCHandData * _d) :handdata(_d) {
+HandsModel::HandsModel(PXCHandData * _d) :handdata(_d),HandCount(0) {
 	skeletontree = new Tree<PointData>[MAX_NUMBER_OF_HANDS];
 	/*jointpoints = new vec3[MAX_NUMBER_OF_JOINTS];
 	jointpoints_t = new vec3[MAX_NUMBER_OF_JOINTS];*/
@@ -250,33 +264,39 @@ void HandsModel::updateskeletonTree() {
 			handOutput->QueryTrackedJoint(PXCHandData::JointType::JOINT_WRIST, jointData);
 			PointData pointData;
 			copyJointToPoint(pointData, jointData);
-			jointpoints_t[0] = PXCPoint3DF32_to_vec3(pointData.positionWorld);
+			jointpoints_t[0].position = PXCPoint3DF32_to_vec3(pointData.positionWorld);
+			jointpoints_t[0].speed = PXCPoint3DF32_to_vec3(pointData.speed);
 
 			Node<PointData> rootDataNode(pointData);
 
 			handOutput->QueryTrackedJoint(PXCHandData::JointType::JOINT_CENTER, jointData);
 			copyJointToPoint(pointData, jointData);
-			jointpoints_t[1] = PXCPoint3DF32_to_vec3(pointData.positionWorld);
+			jointpoints_t[1].position = PXCPoint3DF32_to_vec3(pointData.positionWorld);
+			jointpoints_t[1].speed = PXCPoint3DF32_to_vec3(pointData.speed);
 
 			// Iterate over hand joints
 			for (int i = 2; i < MAX_NUMBER_OF_JOINTS - 3; i += 4) {
 				handOutput->QueryTrackedJoint((PXCHandData::JointType)(i + 3), jointData);
 				copyJointToPoint(pointData, jointData);
-				jointpoints_t[(i + 3)] = PXCPoint3DF32_to_vec3(pointData.positionWorld);
+				jointpoints_t[(i + 3)].position = PXCPoint3DF32_to_vec3(pointData.positionWorld);
+				jointpoints_t[(i + 3)].speed = PXCPoint3DF32_to_vec3(pointData.speed);
 
 				Node<PointData> dataNode(pointData);
 				handOutput->QueryTrackedJoint((PXCHandData::JointType)(i + 2), jointData);
 				copyJointToPoint(pointData, jointData);
-				jointpoints_t[i + 2] = PXCPoint3DF32_to_vec3(pointData.positionWorld);
+				jointpoints_t[i + 2].position = PXCPoint3DF32_to_vec3(pointData.positionWorld);
+				jointpoints_t[(i + 2)].speed = PXCPoint3DF32_to_vec3(pointData.speed);
 				Node<PointData> dataNode1(pointData);
 				handOutput->QueryTrackedJoint((PXCHandData::JointType)(i + 1), jointData);
 				copyJointToPoint(pointData, jointData);
-				jointpoints_t[i + 1] = PXCPoint3DF32_to_vec3(pointData.positionWorld);
+				jointpoints_t[i + 1].position = PXCPoint3DF32_to_vec3(pointData.positionWorld);
+				jointpoints_t[(i + 1)].speed = PXCPoint3DF32_to_vec3(pointData.speed);
 
 				Node<PointData> dataNode2(pointData);
 				handOutput->QueryTrackedJoint((PXCHandData::JointType)(i), jointData);
 				copyJointToPoint(pointData, jointData);
-				jointpoints_t[i] = PXCPoint3DF32_to_vec3(pointData.positionWorld);
+				jointpoints_t[i].position = PXCPoint3DF32_to_vec3(pointData.positionWorld);
+				jointpoints_t[i].speed = PXCPoint3DF32_to_vec3(pointData.speed);
 
 				Node<PointData> dataNode3(pointData);
 
@@ -288,7 +308,23 @@ void HandsModel::updateskeletonTree() {
 
 			skeletontree[side].setRoot(rootDataNode);
 			var muti = glm::vec3(100, 100, 50);
-
+			bool isLog = true;
+			if (isLog) {
+				if (HandCount < 1500) {
+				
+					std::array<glm::vec3, 3> _tlog_p = { jointpoints_t[0].position,jointpoints_t[1].position,jointpoints_t[2].position };
+					std::array<glm::vec3, 3> _tlog_s = { jointpoints_t[0].speed,jointpoints_t[1].speed,jointpoints_t[2].speed };
+					handlog_p.push_back(_tlog_p);
+					handlog_s.push_back(_tlog_s);
+					cout << "Recording:" << HandCount
+						<< "\t" << jointpoints_t[0].position.x
+						<< "\t" << jointpoints_t[0].position.y
+						<< "\t" << jointpoints_t[0].position.z
+						<< endl;
+					HandCount += 1;
+				}
+				
+			}
 			/*for (int j = 0; j < MAX_NUMBER_OF_JOINTS; ++j) {
 			jointpoints[j] = muti*jointpoints_t[j];
 			}*/
@@ -300,7 +336,7 @@ glm::vec3 HandsModel::PXCPoint3DF32_to_vec3(PXCPoint3DF32 _p)const {
 	return glm::vec3(_p.x, _p.y, _p.z);
 }
 
-glm::vec3* HandsModel::GetPoint() {
+JointPositionSpeed* HandsModel::GetPoint() {
 	return jointpoints_t;
 }
 
@@ -317,4 +353,8 @@ void HandsModel::copyJointToPoint(PointData & dst, const PXCHandData::JointData 
 	dst.positionImage = src.positionImage;
 	dst.positionWorld = src.positionWorld;
 	dst.speed = src.speed;
+}
+
+void PXCAPI ovrHandAlertHandler::OnFiredAlert(const PXCHandData::AlertData & _d) {
+	return;
 }

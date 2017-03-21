@@ -12,7 +12,6 @@
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-
 //using namespace glm;
 using namespace std;
 
@@ -39,9 +38,8 @@ public:
 	static GLuint LoadShader_sdl_s(const char* _vpath, const char* _fpath);
 	static GLuint LoadShader_sdl_s(const char* _vpath, const char* _gpath, const char* _fpath);
 	void LoadShader_sdl(const char* _vpath, const char* _fpath);
-
+	static glm::mat4 GetRotationMatrixFromVec3(glm::vec3, glm::vec3);
 	static GLuint CreatCubeMap_s(CubePaths cp);
-
 
 	//handle sdl event
 	virtual int ProcessEvent_sdl();
@@ -62,10 +60,8 @@ protected:
 	char* sdl_title;
 	GLuint *sdl_program;
 	
-	
 	static void PrintShaderLog_sdl(GLuint);
 	static void PrintProgramLog_sdl(GLuint);
 };
-
 
 #endif // !_SDLGL_H_
