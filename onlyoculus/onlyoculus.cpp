@@ -23,6 +23,12 @@
 #define PROPORTION 0.75
 #define EYELOCATION 10
 #define MINFOVTANGENT 1.05865765
+#define INTERIORTANGENT 1.09236801
+#define OUTBOARDTANGENT 1.05865765
+#define UPPERTANGENT 1.33160317
+#define DOWNTANGENT 1.33160317
+
+#define JSTEST
 
 using namespace std;
 
@@ -30,16 +36,31 @@ SDLGL *gl = nullptr;
 cv::VideoCapture capture;
 PXCSenseManager *sm;
 PXCImage::ImageData rsdata;
+PXCHandData::GestureData gstData;
 int offset = 200;
+float scalefactor = 10;
+GLboolean isLock_current_position_last = false;
+GLboolean isLock_current_position_derivative = false;
+GLboolean isLock_current_position = false;
+GLfloat scale_coefficent(1), translate_coefficent(1);
 glm::vec3 handpos;
+glm::vec3 primal_position(0);
+glm::vec3 primal_position_normalized(0);
+glm::vec3 primal_orientation(0);
+glm::vec3 current_position(0);
+glm::mat4 final_model(1);
+glm::mat4 final_rotation(1), final_translate(1), final_scale(1);
+glm::mat4 last_rotation(1), last_translate(1), last_scale(1);
+glm::mat4 current_rotation(1), current_translate(1), current_scale(1);
+
 ovrrs_fh *rsf;
 KalmanFilter<glm::vec3> *kal;
 static vector<array<glm::vec3, 3>> handlog_p;
-static vector<array<glm::vec3,3>> handlog_s;
+static vector<array<glm::vec3, 3>> handlog_s;
 bool isLog = false;
 bool isLoadModels = true;
 Operation current_opr = Operation::NONE, last_opr = Operation::NONE;
-GLfloat model_thickness(0), model_width(1);
+GLfloat model_thickness(0), model_width(0), model_height(0);
 
 GLfloat skyboxVertices[] = {
 	// Positions          
@@ -116,7 +137,7 @@ GLfloat mmVertices1[] = {
 
 void VALIDATE(bool x, const char *msg) {
 	if (!x) {
-		cout << msg;
+		std::cout << msg;
 		exit(-1);
 	}
 }
@@ -144,7 +165,6 @@ static ovrGraphicsLuid GetDefaultAdapterLuid() {
 	return luid;
 }
 
-
 static int Compare(const ovrGraphicsLuid& lhs, const ovrGraphicsLuid& rhs) {
 	return memcmp(&lhs, &rhs, sizeof(ovrGraphicsLuid));
 }
@@ -152,33 +172,152 @@ static int Compare(const ovrGraphicsLuid& lhs, const ovrGraphicsLuid& rhs) {
 void SDL_Handel_KeyEvent(SDL_Keysym* keysys) {
 	switch (keysys->sym) {
 	case SDLK_d:
+		if (current_opr == Operation::DISPLACEMENT) {
+			std::cout << "Already in Displacement Mode" << endl;
+			break;
+		}
+		isLock_current_position = true;
 		last_opr = current_opr;
 		current_opr = Operation::DISPLACEMENT;
-		cout << "Displacement Mode" << endl;
+		std::cout << "Displacement Mode" << endl;
 		break;
 	case SDLK_r:
+		if (current_opr == Operation::ROTATION) {
+			std::cout << "Already in Rotation Mode" << endl;
+			break;
+		}
+		isLock_current_position = true;
 		last_opr = current_opr;
 		current_opr = Operation::ROTATION;
-		cout << "Rotation Mode" << endl;
+		std::cout << "Rotation Mode" << endl;
 		break;
 	case SDLK_s:
+		if (current_opr == Operation::SCALE) {
+			std::cout << "Already in Scale Mode" << endl;
+			break;
+		}
+		isLock_current_position = true;
 		last_opr = current_opr;
 		current_opr = Operation::SCALE;
-		cout << "Scale Mode" << endl;
+		std::cout << "Scale Mode" << endl;
 		break;
 	case SDLK_q:
+		if (current_opr == Operation::DISPLAY) {
+			std::cout << "Already in Display Mode" << endl;
+			break;
+		}
+		primal_position_normalized = glm::vec3(0);
+		isLock_current_position = false;
 		last_opr = current_opr;
 		current_opr = Operation::DISPLAY;
-		cout << "Display Mode" << endl;
+		switch (last_opr) {
+		case Operation::ROTATION:
+			last_rotation = final_rotation;
+			current_rotation = glm::mat4(1);
+			break;
+		case Operation::SCALE:
+			last_scale = final_scale;
+			current_scale = glm::mat4(1);
+			break;
+		case Operation::DISPLACEMENT:
+			last_translate = final_translate;
+			current_translate = glm::mat4(1);
+			break;
+		default:
+			break;
+		}
+		std::cout << "Display Mode" << endl;
+		break;
+	case SDLK_e:
+		if (current_opr != Operation::DISPLAY) {
+			std::cout << "Only Executable in Display Mode" << endl;
+			break;
+		}
+		final_rotation = glm::mat4(1);
+		final_scale = glm::mat4(1);
+		final_translate = glm::mat4(1);
+		last_translate = glm::mat4(1);
+		last_scale = glm::mat4(1);
+		last_rotation = glm::mat4(1);
+		std::cout << "Reset!" << endl;
 		break;
 	default:
 		break;
 	}
+	if (isLock_current_position_last != isLock_current_position) {
+		isLock_current_position_last = isLock_current_position;
+		isLock_current_position_derivative = true;
+	}
 }
 
 void Display() {
-	
+
 }
+
+#pragma region DISPLACEMENT
+
+//************************************
+// Method:    GetNormalizedHandCoordinate
+// FullName:  GetNormalizedHandCoordinate
+// Access:    public 
+// Returns:   Normalized Hand Coordinate
+// Qualifier:
+// Parameter: World Coordinates
+// Parameter: If Output Coordinates
+//************************************
+glm::vec3 GetNormalizedHandCoordinate(glm::vec3 coordinate, GLboolean isPrint = true) {
+	if (coordinate.z == 0) {
+		return glm::vec3(0);
+	}
+	var _rx = coordinate.x / (coordinate.z * glm::tan(glm::radians(35.75)));
+	var _ry = coordinate.y / (coordinate.z * glm::tan(glm::radians(27.5)));
+	if (isPrint) {
+		std::cout << "Nx, Ny, Oz:" << _rx << "\t" << _ry << "\t" << coordinate.z << endl;
+	}
+	return glm::vec3(_rx, _ry, coordinate.z);
+}
+
+glm::vec3 GetNormalizedCameraSpaceIncrement(glm::vec3 primal, glm::vec3 current, GLboolean isPrint = true) {
+	if (primal_position_normalized.x == 0 && primal_position_normalized.y == 0 && primal_position_normalized.z == 0) {
+		primal_position_normalized = GetNormalizedHandCoordinate(primal, isPrint);
+	}
+	return GetNormalizedHandCoordinate(current, isPrint) - primal_position_normalized;
+}
+
+//************************************
+// Method:    GetWorldSpaceIncrement
+// FullName:  GetWorldSpaceIncrement
+// Access:    public 
+// Returns:   glm::vec3
+// Qualifier:
+// Parameter: Coordinate
+//************************************
+glm::vec3 GetWorldSpaceIncrement(glm::vec3 coordinate) {
+	var _rx = coordinate.x * (EYELOCATION * (OUTBOARDTANGENT));
+	var _ry = coordinate.y * (EYELOCATION * (UPPERTANGENT));
+	std::cout << "dx, dy, Oz:" << _rx << "\t" << _ry << "\t" << coordinate.z << endl;
+	return glm::vec3(_rx, _ry, coordinate.z);
+}
+
+#pragma endregion
+
+#pragma region SCALE
+
+float GetScaling(glm::vec3 primal, glm::vec3 current) {
+	var _m = GetNormalizedCameraSpaceIncrement(primal, current);
+	if (_m.x >= 0) {
+		var _s = glm::pow(_m.x, 2) + 1;
+		std::cout << "Amplify:" << _s << endl;
+		return _s;
+	}
+	else {
+		var _s = 1/(1 + glm::pow(_m.x, 2));
+		std::cout << "Reduce:" << _s << endl;
+		return _s;
+	}
+}
+
+#pragma endregion
 
 bool MainLoop() {
 	TextureBuffer *eyeRenderTexture[2] = { nullptr,nullptr };
@@ -199,10 +338,10 @@ bool MainLoop() {
 	var hmdDesc = ovr_GetHmdDesc(session);
 
 	ovrSizei windowSize = { hmdDesc.Resolution.w*0.5, hmdDesc.Resolution.h*0.5 };
-	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 5);
-	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 5);
-	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 5);
-	SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 5);
+	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
+	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
+	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
+	SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
 	gl = new SDLGL(windowSize.w, windowSize.h);
 
 #ifdef CVCAP
@@ -261,7 +400,7 @@ bool MainLoop() {
 	var PRG_ar = SDLGL::LoadShader_sdl_s("ar.vert", "ar.frag");
 	var windowscale = (float)width / height;
 	var texturescale = (float)textwidth / textheight;
-	if (windowscale>texturescale) {
+	if (windowscale > texturescale) {
 		for (int i = 0; i < 6; ++i) {
 			ARVertices[4 * i] *= (texturescale / windowscale);
 		}
@@ -282,7 +421,7 @@ bool MainLoop() {
 	if (isLoadModels) {
 		//vector<A_model> models(objfiles.size());
 		bool _isFirstMax = true;
-		for (int i = 0; i < objfiles.size(); ++i) {
+		for (int i = 0; i < /*objfiles.size()*/3; ++i) {
 			var _objname = objfiles[i].substr(objfiles[i].find_last_of('\\') + 1);
 			int _idx;
 			sscanf_s(_objname.c_str(), "%*6s%d%*s", &_idx);
@@ -293,7 +432,7 @@ bool MainLoop() {
 			else {
 				modelcolor[i] = colorfile[_idx];
 			}
-			cout << _objname << endl;
+			std::cout << _objname << endl;
 			models[i].load_model(objfiles[i].c_str());
 			if (_isFirstMax) {
 				_max = models[0].vMax[0];
@@ -306,8 +445,9 @@ bool MainLoop() {
 		}
 		_center = (_max + _min)*0.5f;
 		model_width = _max.x - _min.x;
+		model_height = _max.y - _min.y;
 		model_thickness = _max.z - _min.z;
-		cout << "ALL LOADED" << endl;
+		std::cout << "ALL LOADED" << endl;
 	}
 	//A_model CastleModel("d:/castle.obj");
 	/*var aaa = objfiles[0];
@@ -316,6 +456,7 @@ bool MainLoop() {
 	var PRG_castle = SDLGL::LoadShader_sdl_s("cast.vert", "cast.frag");
 	var PRG_skybox = SDLGL::LoadShader_sdl_s("skybox.vert", "skybox.frag");
 	var PRG_hand = SDLGL::LoadShader_sdl_s("hv.glsl", "hg.glsl", "hf.glsl");
+	var PRG_hand_line = SDLGL::LoadShader_sdl_s("hv.glsl", "hf.glsl");
 	const char* _p[] = {
 		"mp_orbital/orbital-element_ft.tga",
 		"mp_orbital/orbital-element_bk.tga",
@@ -324,7 +465,8 @@ bool MainLoop() {
 		"mp_orbital/orbital-element_rt.tga",
 		"mp_orbital/orbital-element_lf.tga"
 	};
-	GLuint VAO_skybox,VBO_skybox;
+	
+	GLuint VAO_skybox, VBO_skybox;
 	glGenVertexArrays(1, &VAO_skybox);
 	glBindVertexArray(VAO_skybox);
 	glGenBuffers(1, &VBO_skybox);
@@ -343,8 +485,22 @@ bool MainLoop() {
 	glGenBuffers(1, &VBO_hand);
 	glBindBuffer(GL_ARRAY_BUFFER, VBO_hand);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(JointPositionSpeed)*MAX_NUMBER_OF_JOINTS, &_ve[0].position, GL_STATIC_DRAW);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(JointPositionSpeed), (void*)offsetof(JointPositionSpeed,position));
+	glEnableVertexArrayAttrib(VAO_hand,0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(JointPositionSpeed), (void*)offsetof(JointPositionSpeed, position));
+	glBindVertexArray(0);
+	
+
+	while (GLenum err = glGetError() != GL_NO_ERROR) {
+		std::cerr << err;
+	}
+	GLuint VBO_hand_line, VAO_hand_line;
+	glGenVertexArrays(1, &VAO_hand_line);
+	glBindVertexArray(VAO_hand_line);
+	glGenBuffers(1, &VBO_hand_line);
+	glBindBuffer(GL_ARRAY_BUFFER, VBO_hand_line);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(JointPositionSpeed)*6, &_ve[0].position, GL_STATIC_DRAW);
+	glEnableVertexArrayAttrib(VAO_hand_line, 0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(JointPositionSpeed), (void*)offsetof(JointPositionSpeed, position));
 	glBindVertexArray(0);
 
 
@@ -450,24 +606,24 @@ bool MainLoop() {
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 
 	glEnable(GL_DEPTH_TEST);
+	//glEnable(GL_PROGRAM_POINT_SIZE);
 	glClearColor(0, 0, 0, 0);
 	bool quit = false;
 	if (isLoadModels) {
-		GLfloat scale = (2 * PROPORTION*EYELOCATION*MINFOVTANGENT) / (model_width + PROPORTION*model_thickness*MINFOVTANGENT);
-		GLfloat scale2 = 0.5*EYELOCATION / model_thickness;
-		scale = glm::min(scale, scale2);
+		GLfloat scale = (2 * PROPORTION * EYELOCATION * MINFOVTANGENT) / (model_width + PROPORTION*model_thickness*MINFOVTANGENT);
+		GLfloat scale1 = (2 * PROPORTION * EYELOCATION * MINFOVTANGENT) / (model_height + PROPORTION*model_thickness*MINFOVTANGENT);
+		GLfloat scale2 = 0.5 * EYELOCATION / model_thickness;
+		scale = glm::min(glm::min(scale, scale1), scale2);
 		var light_dir = glm::normalize(glm::vec3(-1, 1, -1));
 		var mat_center = glm::translate(-_center);
 		var mat_center_reverse = glm::translate(_center);
 		var mat_scale = glm::scale(glm::vec3(scale));
 		glProgramUniform3fv(PRG_castle, glGetUniformLocation(PRG_castle, "light_dir"), 1, &light_dir.x);
 		glProgramUniformMatrix4fv(PRG_castle, glGetUniformLocation(PRG_castle, "mat_center"), 1, false, glm::value_ptr(mat_center));
-		glProgramUniformMatrix4fv(PRG_castle, glGetUniformLocation(PRG_castle, "mat_scale"), 1, false, glm::value_ptr(mat_scale));
+		glProgramUniformMatrix4fv(PRG_castle, glGetUniformLocation(PRG_castle, "mat_cscale"), 1, false, glm::value_ptr(mat_scale));
 		glProgramUniformMatrix4fv(PRG_castle, glGetUniformLocation(PRG_castle, "mat_center_reverse"), 1, false, glm::value_ptr(mat_center_reverse));
-
 	}
-
-	glm::mat4 final_model(1), last_model(1);
+	glLineWidth(2);
 	while (!quit) {
 		while (SDL_PollEvent(&event)) {
 			switch (event.type) {
@@ -500,7 +656,7 @@ bool MainLoop() {
 			static float Yaw(0);
 			static Vector3f Pos2(0.0f, 0.0f, EYELOCATION);
 			static int handcount = 0;
-			
+
 			// Call ovr_GetRenderDesc each frame to get the ovrEyeRenderDesc, as the returned values (e.g. HmdToEyeOffset) may change at runtime.
 			ovrEyeRenderDesc eyeRenderDesc[2];
 			eyeRenderDesc[0] = ovr_GetRenderDesc(session, ovrEye_Left, hmdDesc.DefaultEyeFov[0]);
@@ -522,7 +678,7 @@ bool MainLoop() {
 
 				Matrix4f rollPitchYaw = Matrix4f::RotationY(Yaw);
 				Matrix4f finalRollPitchYaw = rollPitchYaw * Matrix4f(EyeRenderPose[eye].Orientation);
-				//cout << eye << ":\t" << EyeRenderPose[eye].Orientation.x << ends << EyeRenderPose[eye].Orientation.y << ends << EyeRenderPose[eye].Orientation.z << endl;
+				//std::cout << eye << ":\t" << EyeRenderPose[eye].Orientation.x << ends << EyeRenderPose[eye].Orientation.y << ends << EyeRenderPose[eye].Orientation.z << endl;
 				Vector3f finalUp = finalRollPitchYaw.Transform(Vector3f(0, 1, 0));
 				Vector3f finalForward = finalRollPitchYaw.Transform(Vector3f(0, 0, -1));
 				Vector3f shiftedEyePos = Pos2 + rollPitchYaw.Transform(EyeRenderPose[eye].Position);
@@ -535,23 +691,22 @@ bool MainLoop() {
 				glUniformMatrix4fv(glGetUniformLocation(PRG_hand, "mat_model"), 1, false, glm::value_ptr(mat_model1));
 				glUniformMatrix4fv(glGetUniformLocation(PRG_hand, "mat_view"), 1, false, glm::value_ptr(mat_view1));
 				glUniformMatrix4fv(glGetUniformLocation(PRG_hand, "mat_projection"), 1, GL_TRUE, (float*)&proj.M[0]);
-				glBindVertexArray(VAO_hand);
 				_ve = rsf->GetJointPoints();
-				var _rotate = glm::rotate(-_ve[1].position.x, glm::vec3(0, 1, 0));
+				//var _rotate = glm::rotate(-_ve[1].position.x, glm::vec3(0, 1, 0));
 				static GLuint time = 0;
 
-				if (isLog) {
+				/*if (isLog) {
 					if (time == 0) {
 						time = SDL_GetTicks();
 					}
 					if (rsf->GetLogCount() >= 1500) {
 						isLog = false;
 						time = SDL_GetTicks() - time;
-						cout << "Writing...(" << time << ")" << endl;
+						std::cout << "Writing...(" << time << ")" << endl;
 						::WriteLogWithSpeed(rsf->GetLog_p(), rsf->GetLog_s());
 					}
-				}
-
+				}*/
+				//var _ts = rsf->GetJointPoints();
 				/*if (isLog) {
 					if (handcount < 3000) {
 						if (time == 0) {
@@ -561,7 +716,7 @@ bool MainLoop() {
 						array<glm::vec3, 3> _tlog_s = { _ve[0].speed,_ve[1].speed,_ve[2].speed };
 						handlog_p.push_back(_tlog_p);
 						handlog_s.push_back(_tlog_s);
-						cout << "Recording:" << handcount
+						std::cout << "Recording:" << handcount
 							<< "\t" << _ve[0].position.x
 							<< "\t" << _ve[0].position.y
 							<< "\t" << _ve[0].position.z
@@ -571,26 +726,98 @@ bool MainLoop() {
 					else if (handcount == 3000) {
 						handcount += 1;
 						time = SDL_GetTicks() - time;
-						cout << "Writing...(" << time << ")" << endl;
+						std::cout << "Writing...(" << time << ")" << endl;
 						::WriteLogWithSpeed(handlog_p, handlog_s);
 					}
 				}*/
+				glBindVertexArray(VAO_hand);
+				glBindBuffer(GL_ARRAY_BUFFER, VBO_hand);
 				glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(JointPositionSpeed)*MAX_NUMBER_OF_JOINTS, &_ve[0]);
+				glBindBuffer(GL_ARRAY_BUFFER, 0);
 				glDrawArrays(GL_POINTS, 0, MAX_NUMBER_OF_JOINTS);
 				glBindVertexArray(0);
 				glUseProgram(0);
+
+				glUseProgram(PRG_hand_line);
+				glUniformMatrix4fv(glGetUniformLocation(PRG_hand_line, "mat_model"), 1, false, glm::value_ptr(mat_model1));
+				glUniformMatrix4fv(glGetUniformLocation(PRG_hand_line, "mat_view"), 1, false, glm::value_ptr(mat_view1));
+				glUniformMatrix4fv(glGetUniformLocation(PRG_hand_line, "mat_projection"), 1, GL_TRUE, (float*)&proj.M[0]);
+				glBindVertexArray(VAO_hand_line);
+				glBindBuffer(GL_ARRAY_BUFFER, VBO_hand_line);
+				static JointPositionSpeed _js[6];
+				_js[0] = _ve[0];
+				_js[1] = _ve[2];
+				_js[2] = _ve[3];
+				_js[3] = _ve[4];
+				_js[4] = _ve[5];
+				_js[5] = _ve[13];
+				glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(JointPositionSpeed) * 6, &_js[0]);
+				glDrawArrays(GL_LINE_STRIP, 0, 5);
+				_js[1] = _ve[6];
+				_js[2] = _ve[7];
+				_js[3] = _ve[8];
+				_js[4] = _ve[9];
+				glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(JointPositionSpeed) * 5, &_js[0]);
+				glDrawArrays(GL_LINE_STRIP, 0, 5);
+				_js[1] = _ve[1];
+				_js[2] = _ve[10];
+				_js[3] = _ve[11];
+				_js[4] = _ve[12];
+				glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(JointPositionSpeed) * 5, &_js[0]);
+				glDrawArrays(GL_LINE_STRIP, 0, 6);
+				_js[1] = _ve[14];
+				_js[2] = _ve[15];
+				_js[3] = _ve[16];
+				_js[4] = _ve[17];
+				glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(JointPositionSpeed) * 5, &_js[0]);
+				glDrawArrays(GL_LINE_STRIP, 0, 5);
+				_js[1] = _ve[18];
+				_js[2] = _ve[19];
+				_js[3] = _ve[20];
+				_js[4] = _ve[21];
+				glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(JointPositionSpeed) * 5, &_js[0]);
+				glDrawArrays(GL_LINE_STRIP, 0, 5);
+				glBindBuffer(GL_ARRAY_BUFFER, 0);
+				glBindVertexArray(0);
+				glUseProgram(0);
+
+				if (isLock_current_position_derivative) {
+					primal_position = _ve[1].position;
+					primal_orientation = glm::vec3(-1, 1, 1) * (_ve[1].position - _ve[0].position);
+					isLock_current_position_derivative = false;
+				}
 				if (isLoadModels) {
 					switch (current_opr) {
 					case Operation::ROTATION:
 					{
 						var _orientation = _ve[1].position - _ve[0].position;
-						_orientation = glm::vec3(-1, 1, 1)*_orientation;
-						final_model = SDLGL::GetRotationMatrixFromVec3(glm::vec3(0, 1, 0), _orientation)*last_model;
+						_orientation = glm::vec3(-1, 1, 1) * _orientation;
+						//current_rotation = SDLGL::GetRotationMatrixFromVec3(primal_orientation, _orientation) * last_rotation;
+						current_rotation = SDLGL::GetRotationMatrixFromVec3(primal_orientation, _orientation);
+						final_rotation = current_rotation * last_rotation;
+						break;
+					}
+					case Operation::SCALE:
+					{
+						var _scale = GetScaling(glm::vec3(-1, 1, 1)*primal_position, glm::vec3(-1, 1, 1)*_ve[1].position);
+						current_scale = glm::scale(glm::vec3((_scale == 0) ? 1 : _scale));
+						final_scale = current_scale * last_scale;
+						break;
+					}
+					case Operation::DISPLACEMENT:
+					{
+						var _nc = glm::vec3(-1,1,1) * GetNormalizedCameraSpaceIncrement(primal_position, _ve[1].position);
+						var _wi = GetWorldSpaceIncrement(_nc);
+						current_translate = translate_coefficent * glm::translate(_wi);
+						final_translate = current_translate * last_translate;
+						;
+						int i = 0;
 						break;
 					}
 					default:
 						break;
 					}
+					final_model = final_scale * final_rotation * final_translate;
 					//glm::mat4 model = glm::translate(glm::vec3(0, 0, loop / 10.f));
 					glUseProgram(PRG_castle);
 					for (int _n = 0; _n < objfiles.size(); _n++) {
@@ -649,7 +876,7 @@ bool MainLoop() {
 #ifdef AR_TEST
 				//This function blocks until a color sample is ready
 				if (sm->AcquireFrame(true) < PXC_STATUS_NO_ERROR) {
-					cout << "AcquireFrame::ERR" << endl;
+					std::cout << "AcquireFrame::ERR" << endl;
 					break;
 				}
 				// retrieve the sample
@@ -660,7 +887,7 @@ bool MainLoop() {
 				if (!info) {
 					PXCImage::ImageInfo rgb_info;
 					rgb_info = color_img->QueryInfo();
-					cout << rgb_info.width << "*" << rgb_info.height << endl;
+					std::cout << rgb_info.width << "*" << rgb_info.height << endl;
 					info = true;
 				}
 				glDepthFunc(GL_LEQUAL);
@@ -708,7 +935,7 @@ bool MainLoop() {
 				eyeRenderTexture[eye]->Commit();
 			}
 			// Do distortion rendering, Present and flush/sync
-			
+
 			ovrLayerEyeFov ld;
 			ld.Header.Type = ovrLayerType_EyeFov;
 			ld.Header.Flags = ovrLayerFlag_TextureOriginAtBottomLeft;   // Because OpenGL.
@@ -724,7 +951,7 @@ bool MainLoop() {
 			_r = ovr_SubmitFrame(session, frameIndex, nullptr, &layers, 1);
 			// exit the rendering loop if submit returns an error, will retry on ovrError_DisplayLost
 			if (!OVR_SUCCESS(_r)) {
-				cout << "Submit frame failed" << endl;
+				std::cout << "Submit frame failed" << endl;
 				break;
 			}
 			frameIndex++;
@@ -740,7 +967,7 @@ bool MainLoop() {
 		glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 		SDL_GL_SwapWindow(gl->GetWindow_sdl());
 	}
-	
+
 	if (mirrorFBO) {
 		glDeleteFramebuffers(1, &mirrorFBO);
 	}
@@ -772,7 +999,7 @@ int main(int argc, char* argv[]) {
 #ifdef CVCAP
 	capture.open(0);
 	if (!capture.isOpened()) {
-		cout << "capture failed" << endl;
+		std::cout << "capture failed" << endl;
 		system("pause");
 		return -1;
 	}

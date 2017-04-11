@@ -6,4 +6,5 @@ uniform mat4 mat_projection;
 
 void main(){
 	gl_Position=mat_projection*mat_view*mat_model*vec4(-vertices.x,vertices.y,vertices.z,1);
+	gl_PointSize = gl_Position.z;
 }

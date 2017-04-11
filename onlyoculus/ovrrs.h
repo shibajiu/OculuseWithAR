@@ -86,7 +86,8 @@ class ovrrs_fh {
 private:
 	ovrHandAlertHandler *alert;
 	glm::vec3 orientation;
-	bool isStop;
+	bool isStop = false;
+	bool isFist = false;
 	HandsModel* handsmodel;
 
 	const ovrrs_fh& operator =(const ovrrs_fh& o) = delete;
@@ -102,9 +103,10 @@ public:
 	ovrrs_fh() {}
 	int Start();
 	int Stop();
-	glm::vec3 GetWristOrientation();
-	JointPositionSpeed* GetJointPoints();
-	int GetLogCount();
+	glm::vec3 GetWristOrientation() const;
+	JointPositionSpeed* GetJointPoints() const;
+	const bool GetFistStatus() const;
+	int GetLogCount() const;
 	const vector<array<glm::vec3, 3>>& GetLog_p() const;
 	const vector<array<glm::vec3, 3>>& GetLog_s() const;
 	void Release();

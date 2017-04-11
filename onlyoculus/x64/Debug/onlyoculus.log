@@ -1,22 +1,14 @@
-﻿  SDLGL.cpp
-d:\myprojects\onlyoculus\onlyoculus\sdlgl.cpp(198): warning C4244: 'argument': conversion from 'double' to 'const float', possible loss of data
-d:\myprojects\onlyoculus\onlyoculus\sdlgl.cpp(220): warning C4101: '_height': unreferenced local variable
-d:\myprojects\onlyoculus\onlyoculus\sdlgl.cpp(220): warning C4101: '_width': unreferenced local variable
-d:\myprojects\onlyoculus\onlyoculus\sdlgl.cpp(273): warning C4838: conversion from 'double' to 'GLfloat' requires a narrowing conversion
-d:\myprojects\onlyoculus\onlyoculus\sdlgl.cpp(273): warning C4305: 'initializing': truncation from 'double' to 'GLfloat'
-  Generating Code...
-  Compiling...
-  onlyoculus.cpp
+﻿  onlyoculus.cpp
 d:\projects\source\opencv\build\include\opencv2\core\mat.hpp(2586): warning C4819: The file contains a character that cannot be represented in the current code page (936). Save the file in Unicode format to prevent data loss
 d:\projects\source\opencv\build\include\opencv2\core\persistence.hpp : warning C4819: The file contains a character that cannot be represented in the current code page (936). Save the file in Unicode format to prevent data loss
 d:\projects\source\opencv\build\include\opencv2\core\utility.hpp : warning C4819: The file contains a character that cannot be represented in the current code page (936). Save the file in Unicode format to prevent data loss
 d:\projects\source\opencv\build\include\opencv2\core\utility.hpp : warning C4819: The file contains a character that cannot be represented in the current code page (936). Save the file in Unicode format to prevent data loss
 d:\projects\source\opencv\build\include\opencv2\imgproc.hpp(592): warning C4819: The file contains a character that cannot be represented in the current code page (936). Save the file in Unicode format to prevent data loss
-d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(201): warning C4838: conversion from 'double' to 'int' requires a narrowing conversion
-d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(201): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
-d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(428): warning C4800: 'ovrTextureSwapChain': forcing value to bool 'true' or 'false' (performance warning)
-d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(456): warning C4244: 'initializing': conversion from 'double' to 'GLfloat', possible loss of data
-d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(457): warning C4244: 'initializing': conversion from 'double' to 'GLfloat', possible loss of data
-  Generating Code...
+d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(340): warning C4838: conversion from 'double' to 'int' requires a narrowing conversion
+d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(340): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(584): warning C4800: 'ovrTextureSwapChain': forcing value to bool 'true' or 'false' (performance warning)
+d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(613): warning C4244: 'initializing': conversion from 'double' to 'GLfloat', possible loss of data
+d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(614): warning C4244: 'initializing': conversion from 'double' to 'GLfloat', possible loss of data
+d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(615): warning C4244: 'initializing': conversion from 'double' to 'GLfloat', possible loss of data
   onlyoculus.vcxproj -> D:\MyProjects\onlyoculus\x64\Debug\onlyoculus.exe
   onlyoculus.vcxproj -> D:\MyProjects\onlyoculus\x64\Debug\onlyoculus.pdb (Full PDB)

@@ -153,6 +153,8 @@ void ovrrs_fh::init() {
 	handsmodel = new HandsModel(data);
 	//cout << "CreateOutput" << endl;
 	sm->Init();
+	PXCHandData::GestureData gsdata;
+
 	while (sm->AcquireFrame(0) >= pxcStatus::PXC_STATUS_NO_ERROR) {
 		//If break the loop
 		if (isStop)
@@ -162,6 +164,12 @@ void ovrrs_fh::init() {
 		PXCHandData::IHand *ihand = 0;
 		if (data->QueryNumberOfHands() != 0) {
 			data->QueryHandData(PXCHandData::ACCESS_ORDER_NEAR_TO_FAR, 0, ihand);
+			if (data->IsGestureFired(L"fist", gsdata)) {
+				isFist = true;
+			}
+			else {
+				isFist = false;
+			}
 			PXCHandData::JointData jdata;
 			handsmodel->updateskeletonTree();
 			ihand->QueryTrackedJoint((PXCHandData::JointType)10, jdata);
@@ -205,15 +213,19 @@ int ovrrs_fh::Stop() {
 	return 0;
 }
 
-glm::vec3 ovrrs_fh::GetWristOrientation() {
+glm::vec3 ovrrs_fh::GetWristOrientation() const {
 	return orientation;
 }
 
-JointPositionSpeed* ovrrs_fh::GetJointPoints() {
+JointPositionSpeed* ovrrs_fh::GetJointPoints() const {
 	return handsmodel->GetPoint();
 }
 
-int ovrrs_fh::GetLogCount() {
+const bool ovrrs_fh::GetFistStatus() const {
+	return isFist;
+}
+
+int ovrrs_fh::GetLogCount() const {
 	return handsmodel->HandCount;
 }
 
