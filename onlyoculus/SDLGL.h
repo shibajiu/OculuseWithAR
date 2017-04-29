@@ -34,13 +34,13 @@ public:
 	//two way to create program
 	static GLuint CreateProgram_sdl_s(const char*, const char*);
 	static GLuint CreateProgram_sdl_s(const char*, const char*, const char*);
-	void CreateProgram_sdl(const char*, const char*);
+	[[deprecated("Untested")]] void CreateProgram_sdl(const char*, const char*);
 	static GLuint LoadShader_sdl_s(const char* _vpath, const char* _fpath);
 	static GLuint LoadShader_sdl_s(const char* _vpath, const char* _gpath, const char* _fpath);
-	void LoadShader_sdl(const char* _vpath, const char* _fpath);
+	[[deprecated("Untested")]] void LoadShader_sdl(const char* _vpath, const char* _fpath);
 	static glm::mat4 GetRotationMatrixFromVec3(glm::vec3, glm::vec3);
 	static GLuint CreatCubeMap_s(CubePaths cp);
-
+	
 	//handle sdl event
 	virtual int ProcessEvent_sdl();
 

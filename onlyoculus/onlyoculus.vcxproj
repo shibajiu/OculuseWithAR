@@ -58,27 +58,31 @@
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\..\..\Projects\PropertySheet\OGL_OVR_Debug_Win32.props" />
-    <Import Project="..\..\..\Projects\PropertySheet\cvps.props" />
     <Import Project="C:\Program Files (x86)\Intel\RSSDK\props\VS2010-15.Integration.MT.props" />
+    <Import Project="..\..\..\Projects\PropertySheet\OGL_OVR_Debug.props" />
+    <Import Project="..\..\..\Projects\PropertySheet\iFlyCommand.props" />
+    <Import Project="..\..\..\Projects\PropertySheet\leapmotion.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\..\..\Projects\PropertySheet\OGL_OVR_Debug_Win32.props" />
-    <Import Project="..\..\..\Projects\PropertySheet\cvps.props" />
     <Import Project="C:\Program Files (x86)\Intel\RSSDK\props\VS2010-15.Integration.MT.props" />
+    <Import Project="..\..\..\Projects\PropertySheet\OGL_OVR_Debug.props" />
+    <Import Project="..\..\..\Projects\PropertySheet\iFlyCommand.props" />
+    <Import Project="..\..\..\Projects\PropertySheet\leapmotion.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\..\..\Projects\PropertySheet\OGL_OVR_Debug_Win32.props" />
-    <Import Project="..\..\..\Projects\PropertySheet\cvps.props" />
     <Import Project="C:\Program Files (x86)\Intel\RSSDK\props\VS2010-15.Integration.MT.props" />
+    <Import Project="..\..\..\Projects\PropertySheet\OGL_OVR_Debug.props" />
+    <Import Project="..\..\..\Projects\PropertySheet\iFlyCommand.props" />
+    <Import Project="..\..\..\Projects\PropertySheet\leapmotion.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\..\..\Projects\PropertySheet\OGL_OVR_Debug_Win32.props" />
-    <Import Project="..\..\..\Projects\PropertySheet\cvps.props" />
     <Import Project="C:\Program Files (x86)\Intel\RSSDK\props\VS2010-15.Integration.MT.props" />
+    <Import Project="..\..\..\Projects\PropertySheet\OGL_OVR_Debug.props" />
+    <Import Project="..\..\..\Projects\PropertySheet\iFlyCommand.props" />
+    <Import Project="..\..\..\Projects\PropertySheet\leapmotion.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -166,6 +170,7 @@
     <ClInclude Include="KalmanFilter.h" />
     <ClInclude Include="loadwinthAssimp.h" />
     <ClInclude Include="OvrGLItems.h" />
+    <ClInclude Include="ovrlm.h" />
     <ClInclude Include="ovrrs.h" />
     <ClInclude Include="ovrrslog.h" />
     <ClInclude Include="SDLGL.h" />
@@ -176,6 +181,7 @@
   <ItemGroup>
     <ClCompile Include="loadwithAssimp.cpp" />
     <ClCompile Include="onlyoculus.cpp" />
+    <ClCompile Include="ovrlm.cpp" />
     <ClCompile Include="ovrrs.cpp" />
     <ClCompile Include="ovrrslog.cpp" />
     <ClCompile Include="SDLGL.cpp" />

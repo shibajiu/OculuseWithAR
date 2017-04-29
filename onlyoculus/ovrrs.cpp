@@ -3,6 +3,8 @@
 
 using namespace std;
 
+#define RECOGNIZED_GESTURE L"v_sign"
+
 ovrrs_tc::ovrrs_tc() {
 	ps = nullptr;
 	psm = nullptr;
@@ -135,25 +137,25 @@ void ovrrs_fh::init() {
 	IFCERR(sm == NULL, "PXCSenseManager::CreateInstance::FAILED");
 	IFCERR(sm->EnableHand() < pxcStatus::PXC_STATUS_NO_ERROR, "PXCSenseManager::EnableHand::FAILED");
 	var hand = sm->QueryHand();
-
 	//Set up configuration
 	var config = hand->CreateActiveConfiguration();
 	config->EnableStabilizer(true);
 	config->SubscribeAlert(alert);
 	//config->EnableJointSpeed(PXCHandData::JointType::JOINT_WRIST, PXCHandData::JointSpeedType::JOINT_SPEED_AVERAGE, 0);
-	config->EnableJointSpeed(PXCHandData::JointType::JOINT_CENTER, PXCHandData::JointSpeedType::JOINT_SPEED_AVERAGE, 0);
+	//config->EnableJointSpeed(PXCHandData::JointType::JOINT_CENTER, PXCHandData::JointSpeedType::JOINT_SPEED_AVERAGE, 0);
 	config->SetTrackingMode(PXCHandData::TrackingModeType::TRACKING_MODE_FULL_HAND);
 	config->EnableSegmentationImage(false);
 	config->EnableTrackedJoints(true);
+	config->SubscribeGesture(hg_handler);
+	config->EnableGesture(RECOGNIZED_GESTURE);
 	//Enable config
 	config->ApplyChanges();
 	config->Release();
 
 	var data = hand->CreateOutput();
-	handsmodel = new HandsModel(data);
+	handsmodel = new HandsModel(data,this);
 	//cout << "CreateOutput" << endl;
 	sm->Init();
-	PXCHandData::GestureData gsdata;
 
 	while (sm->AcquireFrame(0) >= pxcStatus::PXC_STATUS_NO_ERROR) {
 		//If break the loop
@@ -164,12 +166,7 @@ void ovrrs_fh::init() {
 		PXCHandData::IHand *ihand = 0;
 		if (data->QueryNumberOfHands() != 0) {
 			data->QueryHandData(PXCHandData::ACCESS_ORDER_NEAR_TO_FAR, 0, ihand);
-			if (data->IsGestureFired(L"fist", gsdata)) {
-				isFist = true;
-			}
-			else {
-				isFist = false;
-			}
+			
 			PXCHandData::JointData jdata;
 			handsmodel->updateskeletonTree();
 			ihand->QueryTrackedJoint((PXCHandData::JointType)10, jdata);
@@ -203,6 +200,13 @@ glm::quat ovrrs_fh::PXCPoint4DF32_to_quat(PXCPoint4DF32 _p) const {
 	return _q;
 }
 
+glm::vec3 ovrrs_fh::trkb_center = glm::vec3(0);
+GLfloat ovrrs_fh::trkb_radius_sqr = 0.25 * glm::pow(glm::min(RS_IMAGECOORD_HEIGHT, RS_IMAGECOORD_WIDTH), 2);
+
+ovrrs_fh::ovrrs_fh() {
+	hg_handler = new ovrHandGestureHandler(this);
+}
+
 int ovrrs_fh::Start() {
 	init();
 	return 0;
@@ -213,16 +217,27 @@ int ovrrs_fh::Stop() {
 	return 0;
 }
 
+glm::vec2 ovrrs_fh::GetHandCenterImageCoord() {
+	return glm::vec2(joint_center_imagecoord.x,joint_center_imagecoord.y);
+}
+
+const bool ovrrs_fh::GetFistState() const {
+	if (hg_handler->isFist == 1) {
+		return true;
+	}
+	else {
+		return false;
+	}
+}
+
+void ovrrs_fh::TurnOffFist() { hg_handler->setFistState(0); }
+
 glm::vec3 ovrrs_fh::GetWristOrientation() const {
 	return orientation;
 }
 
 JointPositionSpeed* ovrrs_fh::GetJointPoints() const {
 	return handsmodel->GetPoint();
-}
-
-const bool ovrrs_fh::GetFistStatus() const {
-	return isFist;
 }
 
 int ovrrs_fh::GetLogCount() const {
@@ -239,13 +254,56 @@ const vector<array<glm::vec3, 3>>& ovrrs_fh::GetLog_s() const {
 
 void ovrrs_fh::Release() {
 	delete handsmodel;
+	delete hg_handler;
+}
+
+glm::vec3 ovrrs_fh::get_trackball_pos(glm::vec2 _v) {
+	return get_trackball_pos(_v.x, _v.y);
+}
+
+glm::vec3 ovrrs_fh::get_trackball_pos(float _x, float _y) {
+	_y = RS_IMAGECOORD_HEIGHT - _y;
+	_x = RS_IMAGECOORD_WIDTH - _x;
+	glm::vec3 _t(_x - RS_IMAGECOORD_WIDTH * 0.5, _y - RS_IMAGECOORD_HEIGHT * 0.5, 0);
+	_t -= trkb_center;
+	var _te = _t.x * _t.x + _t.y * _t.y;
+	var _tem = trkb_radius_sqr * 0.5;
+	if (_te <= _tem) {
+		//should normalize this
+		return glm::normalize(glm::vec3(_t.x, _t.y, sqrt(trkb_radius_sqr - _te)));
+	}
+	else if (_te > _tem) {
+		//should normalize this
+		return glm::normalize(glm::vec3(_t.x, _t.y, _tem / glm::sqrt(_te)));
+	}
+	return glm::vec3(0);
+}
+
+glm::quat ovrrs_fh::get_trackball_quat(glm::vec3 _s, glm::vec3 _d) {
+	_s = glm::normalize(_s);
+	_d = glm::normalize(_d);
+	var _cos = glm::dot(_s, _d);
+	//_s=-_d
+	if (_cos < -1 + 0.001) {
+		var _t = glm::vec3(0, 0, 1);
+		var _te = glm::cross(_s, _t);
+		if (glm::length2(_te) < 0.01) {
+			_te = glm::cross(_s, glm::vec3(0, 1, 0));
+		}
+		_te = glm::normalize(_te);
+		return glm::angleAxis(glm::radians(180.f), _te);
+	}
+	var _tem = glm::normalize(cross(_s, _d));
+	//no more than pi
+	var _temp = acosf(_cos);
+	return glm::angleAxis(_temp, _tem);
 }
 
 ovrrs_fh::~ovrrs_fh() {
 	Release();
 }
 
-HandsModel::HandsModel(PXCHandData * _d) :handdata(_d),HandCount(0) {
+HandsModel::HandsModel(PXCHandData * _d, ovrrs_fh* _f) :handdata(_d),HandCount(0),fh(_f) {
 	skeletontree = new Tree<PointData>[MAX_NUMBER_OF_HANDS];
 	/*jointpoints = new vec3[MAX_NUMBER_OF_JOINTS];
 	jointpoints_t = new vec3[MAX_NUMBER_OF_JOINTS];*/
@@ -258,6 +316,7 @@ HandsModel::~HandsModel() {
 void HandsModel::updateskeletonTree() {
 	// Iterate over hands
 	int numOfHands = handdata->QueryNumberOfHands();//@
+	bool isLog = false;
 	for (int index = 0; index < numOfHands; ++index) {
 		// Get hand by access order of entering time
 		PXCHandData::IHand* handOutput = NULL;
@@ -282,6 +341,10 @@ void HandsModel::updateskeletonTree() {
 			Node<PointData> rootDataNode(pointData);
 
 			handOutput->QueryTrackedJoint(PXCHandData::JointType::JOINT_CENTER, jointData);
+			fh->joint_center_imagecoord = jointData.positionImage;
+			if (isLog) {
+				cout << jointData.positionImage.x << "\t" << jointData.positionImage.y << endl;
+			}
 			copyJointToPoint(pointData, jointData);
 			jointpoints_t[1].position = PXCPoint3DF32_to_vec3(pointData.positionWorld);
 			jointpoints_t[1].speed = PXCPoint3DF32_to_vec3(pointData.speed);
@@ -320,7 +383,6 @@ void HandsModel::updateskeletonTree() {
 
 			skeletontree[side].setRoot(rootDataNode);
 			var muti = glm::vec3(100, 100, 50);
-			bool isLog = true;
 			if (isLog) {
 				if (HandCount < 1500) {
 				
@@ -368,5 +430,22 @@ void HandsModel::copyJointToPoint(PointData & dst, const PXCHandData::JointData 
 }
 
 void PXCAPI ovrHandAlertHandler::OnFiredAlert(const PXCHandData::AlertData & _d) {
+	return;
+}
+
+void ovrHandGestureHandler::setFistState(char _s) { isFist = _s; }
+
+void PXCAPI ovrHandGestureHandler::OnFiredGesture(const PXCHandData::GestureData & data) {
+	// handle gestures
+	if (!wcscmp(data.name, RECOGNIZED_GESTURE) ){
+		//handle the tap gesture
+		if (data.state == PXCHandData::GESTURE_STATE_START) {
+			isFist = 1;
+		}
+		else if(data.state == PXCHandData::GESTURE_STATE_END) {
+			isFist = 0;
+		}
+	}
+	
 	return;
 }

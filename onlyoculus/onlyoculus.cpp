@@ -1,5 +1,6 @@
 // onlyoculus.cpp : Defines the entry point for the console application.
 //
+
 #include "stdafx.h"
 #include "SDLGL.h"
 #include "OvrGLItems.h"
@@ -8,11 +9,22 @@
 #include "ovrrs.h"
 #include "ovrrslog.h"
 
-//cv part
-#include <opencv2/core.hpp>
-#include <opencv2/highgui.hpp>
-#include <opencv2/imgproc.hpp>
+//LeapMotion
+#include "ovrlm.h"
 
+//iFly
+#include "cconmmand.h"
+#undef var
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/json_parser.hpp>
+#define var auto
+
+//cv part
+//#include <opencv2/core.hpp>
+//#include <opencv2/highgui.hpp>
+//#include <opencv2/imgproc.hpp>
+
+//RealSense
 #include <pxcsensemanager.h>
 
 #if defined(_WIN32)
@@ -32,8 +44,15 @@
 
 using namespace std;
 
+glm::mat4 CalculateRotation_TrackBall(glm::vec2);
+glm::mat4 CalculateRotation_TrackBall(GLfloat,GLfloat); 
+glm::mat4 CalculateRotation(glm::vec3, glm::vec3);
+glm::mat4 CalculateDisplacement(glm::vec3, glm::vec3);
+glm::mat4 CalculateScale(glm::vec3, glm::vec3);
+void Quit();
+
 SDLGL *gl = nullptr;
-cv::VideoCapture capture;
+//cv::VideoCapture capture;
 PXCSenseManager *sm;
 PXCImage::ImageData rsdata;
 PXCHandData::GestureData gstData;
@@ -42,21 +61,26 @@ float scalefactor = 10;
 GLboolean isLock_current_position_last = false;
 GLboolean isLock_current_position_derivative = false;
 GLboolean isLock_current_position = false;
+GLboolean isSuppressOperation = false;
 GLfloat scale_coefficent(1), translate_coefficent(1);
 glm::vec3 handpos;
 glm::vec3 primal_position(0);
 glm::vec3 primal_position_normalized(0);
 glm::vec3 primal_orientation(0);
 glm::vec3 current_position(0);
+glm::vec3 primal_trkb_pos_imagecoord(0);
 glm::mat4 final_model(1);
 glm::mat4 final_rotation(1), final_translate(1), final_scale(1);
 glm::mat4 last_rotation(1), last_translate(1), last_scale(1);
 glm::mat4 current_rotation(1), current_translate(1), current_scale(1);
 
-ovrrs_fh *rsf;
+SampleListener listener;
+Leap::Controller controller;
+
+std::unique_ptr<ovrrs_fh> rsf;
 KalmanFilter<glm::vec3> *kal;
-static vector<array<glm::vec3, 3>> handlog_p;
-static vector<array<glm::vec3, 3>> handlog_s;
+static vector<array<glm::vec3, 3> > handlog_p;
+static vector<array<glm::vec3, 3> > handlog_s;
 bool isLog = false;
 bool isLoadModels = true;
 Operation current_opr = Operation::NONE, last_opr = Operation::NONE;
@@ -134,10 +158,23 @@ GLfloat mmVertices1[] = {
 	1.0,0.5625,1.0,-1.0
 };
 
+void _setoperation(Operation opr) {
+	last_opr = current_opr;
+	current_opr = opr;
+}
+
+const Operation _getoperation(void) {
+	return current_opr;
+}
+
+const Operation _getlastoperation(void) {
+	return last_opr;
+}
 
 void VALIDATE(bool x, const char *msg) {
 	if (!x) {
 		std::cout << msg;
+		Quit();
 		exit(-1);
 	}
 }
@@ -158,7 +195,6 @@ static ovrGraphicsLuid GetDefaultAdapterLuid() {
 			memcpy(&luid, &desc.AdapterLuid, sizeof(luid));
 			adapter->Release();
 		}
-
 		factory->Release();
 	}
 #endif
@@ -169,59 +205,181 @@ static int Compare(const ovrGraphicsLuid& lhs, const ovrGraphicsLuid& rhs) {
 	return memcmp(&lhs, &rhs, sizeof(ovrGraphicsLuid));
 }
 
+void iFlyJsonCallback(const char * result) {
+	string _r(result);
+	//printf_s(U2G(result));
+	vector<string> vecStr;
+	stringstream stream(_r);
+	boost::property_tree::ptree pt, p1, p2, p3, p4;;
+	boost::property_tree::read_json<boost::property_tree::ptree>(stream, pt);
+	p1 = pt.get_child("ws");
+	for (boost::property_tree::ptree::iterator it = p1.begin(); it != p1.end(); ++it) {
+		p2 = it->second; //firstÎª¿Õ
+		p3 = p2.get_child("cw");
+		p4 = p3.begin()->second;
+		var _id = p4.get<int>("id");
+		if (92 != _id) {
+			switch ((SCommand)_id) {
+			case SCommand::RESET:
+				if (current_opr != Operation::DISPLAY) {
+					std::cout << "Only Executable in Display Mode" << endl;
+					break;
+				}
+				final_rotation = glm::mat4(1);
+				final_scale = glm::mat4(1);
+				final_translate = glm::mat4(1);
+				last_translate = glm::mat4(1);
+				last_scale = glm::mat4(1);
+				last_rotation = glm::mat4(1);
+				std::cout << "Reset!" << endl;
+				break;
+			case SCommand::QUIT:
+				if (current_opr == Operation::DISPLAY) {
+					std::cout << "Already in Display Mode" << endl;
+					break;
+				}
+#ifdef OVRRS
+				rsf->TurnOffFist();
+#endif // OVRRS
+				listener.TurnOffFist();
+				primal_position_normalized = glm::vec3(0);
+				isLock_current_position = false;
+				//last_opr = current_opr;
+				//current_opr = Operation::DISPLAY;
+				_setoperation(Operation::DISPLAY);
+				switch (last_opr) {
+				case Operation::ROTATION:
+					current_rotation = glm::mat4(1);
+					break;
+				case Operation::ROTATION_SWITCH:
+					//last_rotation = final_rotation;
+					//current_rotation = glm::mat4(1);
+					break;
+				case Operation::SCALE:
+					current_scale = glm::mat4(1);
+					break;
+				case Operation::SCALE_SWITCH:
+					//last_scale = final_scale;
+					//current_scale = glm::mat4(1);
+					break;
+				case Operation::DISPLACEMENT:
+					current_translate = glm::mat4(1);
+					break;
+				case Operation::DISPLACEMENT_SWITCH:
+					//last_translate = final_translate;
+					//current_translate = glm::mat4(1);
+					break;
+				default:
+					break;
+				}
+				std::cout << "Display Mode" << endl;
+				break;
+			case SCommand::ROTATION:
+				if ((current_opr == Operation::ROTATION) || (current_opr == Operation::ROTATION_SWITCH)) {
+					std::cout << "Already in Rotation Mode" << endl;
+					break;
+				}
+				isLock_current_position = true;
+				//last_opr = current_opr;
+				//current_opr = Operation::ROTATION_SWITCH;
+				_setoperation(Operation::ROTATION_SWITCH);
+				std::cout << "Switch to Rotation Mode" << endl;
+				break;
+			case SCommand::DISPLACEMENT:
+				if ((current_opr == Operation::DISPLACEMENT) || (current_opr == Operation::DISPLACEMENT_SWITCH)) {
+					std::cout << "Already in Displacement Mode" << endl;
+					break;
+				}
+				isLock_current_position = true;
+				//last_opr = current_opr;
+				//current_opr = Operation::DISPLACEMENT_SWITCH;
+				_setoperation(Operation::DISPLACEMENT_SWITCH);
+				std::cout << "Switch to Displacement Mode" << endl;
+				break;
+			case SCommand::SCALE:
+				if ((current_opr == Operation::SCALE) || (current_opr == Operation::SCALE_SWITCH)) {
+					std::cout << "Already in Scale Mode" << endl;
+					break;
+				}
+				isLock_current_position = true;
+				//last_opr = current_opr;
+				//current_opr = Operation::SCALE_SWITCH;
+				_setoperation(Operation::SCALE_SWITCH);
+				std::cout << "Switch to Scale Mode" << endl;
+				break;
+			default:
+				break;
+			}
+			break;
+		}
+		//cout << p4.get<int>("id") << endl;
+		//vecStr.push_back(stra);
+	}
+}
+
 void SDL_Handel_KeyEvent(SDL_Keysym* keysys) {
 	switch (keysys->sym) {
 	case SDLK_d:
-		if (current_opr == Operation::DISPLACEMENT) {
+		if ((current_opr == Operation::DISPLACEMENT) || (current_opr == Operation::DISPLACEMENT_SWITCH)) {
 			std::cout << "Already in Displacement Mode" << endl;
 			break;
 		}
 		isLock_current_position = true;
 		last_opr = current_opr;
-		current_opr = Operation::DISPLACEMENT;
-		std::cout << "Displacement Mode" << endl;
+		current_opr = Operation::DISPLACEMENT_SWITCH;
+		std::cout << "Switch to Displacement Mode" << endl;
 		break;
 	case SDLK_r:
-		if (current_opr == Operation::ROTATION) {
+		if ((current_opr == Operation::ROTATION) || (current_opr == Operation::ROTATION_SWITCH)) {
 			std::cout << "Already in Rotation Mode" << endl;
 			break;
 		}
 		isLock_current_position = true;
 		last_opr = current_opr;
-		current_opr = Operation::ROTATION;
-		std::cout << "Rotation Mode" << endl;
+		current_opr = Operation::ROTATION_SWITCH;
+		std::cout << "Switch to Rotation Mode" << endl;
 		break;
 	case SDLK_s:
-		if (current_opr == Operation::SCALE) {
+		if ((current_opr == Operation::SCALE) || (current_opr == Operation::SCALE_SWITCH)) {
 			std::cout << "Already in Scale Mode" << endl;
 			break;
 		}
 		isLock_current_position = true;
 		last_opr = current_opr;
-		current_opr = Operation::SCALE;
-		std::cout << "Scale Mode" << endl;
+		current_opr = Operation::SCALE_SWITCH;
+		std::cout << "Switch to Scale Mode" << endl;
 		break;
 	case SDLK_q:
 		if (current_opr == Operation::DISPLAY) {
 			std::cout << "Already in Display Mode" << endl;
 			break;
 		}
+		rsf->TurnOffFist();
 		primal_position_normalized = glm::vec3(0);
 		isLock_current_position = false;
 		last_opr = current_opr;
 		current_opr = Operation::DISPLAY;
 		switch (last_opr) {
 		case Operation::ROTATION:
-			last_rotation = final_rotation;
 			current_rotation = glm::mat4(1);
 			break;
+		case Operation::ROTATION_SWITCH:
+			//last_rotation = final_rotation;
+			//current_rotation = glm::mat4(1);
+			break;
 		case Operation::SCALE:
-			last_scale = final_scale;
 			current_scale = glm::mat4(1);
 			break;
+		case Operation::SCALE_SWITCH:
+			//last_scale = final_scale;
+			//current_scale = glm::mat4(1);
+			break;
 		case Operation::DISPLACEMENT:
-			last_translate = final_translate;
 			current_translate = glm::mat4(1);
+			break;
+		case Operation::DISPLACEMENT_SWITCH:
+			//last_translate = final_translate;
+			//current_translate = glm::mat4(1);
 			break;
 		default:
 			break;
@@ -311,7 +469,7 @@ float GetScaling(glm::vec3 primal, glm::vec3 current) {
 		return _s;
 	}
 	else {
-		var _s = 1/(1 + glm::pow(_m.x, 2));
+		var _s = 1 / (1 + glm::pow(_m.x, 2));
 		std::cout << "Reduce:" << _s << endl;
 		return _s;
 	}
@@ -457,6 +615,7 @@ bool MainLoop() {
 	var PRG_skybox = SDLGL::LoadShader_sdl_s("skybox.vert", "skybox.frag");
 	var PRG_hand = SDLGL::LoadShader_sdl_s("hv.glsl", "hg.glsl", "hf.glsl");
 	var PRG_hand_line = SDLGL::LoadShader_sdl_s("hv.glsl", "hf.glsl");
+	var PRG_leap = SDLGL::LoadShader_sdl_s("leap.vert", "leap.frag");
 	const char* _p[] = {
 		"mp_orbital/orbital-element_ft.tga",
 		"mp_orbital/orbital-element_bk.tga",
@@ -465,7 +624,7 @@ bool MainLoop() {
 		"mp_orbital/orbital-element_rt.tga",
 		"mp_orbital/orbital-element_lf.tga"
 	};
-	
+
 	GLuint VAO_skybox, VBO_skybox;
 	glGenVertexArrays(1, &VAO_skybox);
 	glBindVertexArray(VAO_skybox);
@@ -477,6 +636,23 @@ bool MainLoop() {
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 	glBindVertexArray(0);
 
+	var _ve = listener.GetHandResult();
+	GLuint VBO_hand, VAO_hand;
+	//var p = s.GetHandPos_sdl();
+	glGenVertexArrays(1, &VAO_hand);
+	glBindVertexArray(VAO_hand);
+	glGenBuffers(1, &VBO_hand);
+	glBindBuffer(GL_ARRAY_BUFFER, VBO_hand);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(Leap::Vector)*50, _ve, GL_STATIC_DRAW);
+	glEnableVertexArrayAttrib(VAO_hand, 0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(Leap::Vector), (void*)nullptr);
+	glBindVertexArray(0);
+
+	while (GLenum err = glGetError() != GL_NO_ERROR) {
+		std::cerr << err;
+	}
+
+#ifdef OVRRS
 	var _ve = rsf->GetJointPoints();
 	GLuint VBO_hand, VAO_hand;
 	//var p = s.GetHandPos_sdl();
@@ -485,10 +661,9 @@ bool MainLoop() {
 	glGenBuffers(1, &VBO_hand);
 	glBindBuffer(GL_ARRAY_BUFFER, VBO_hand);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(JointPositionSpeed)*MAX_NUMBER_OF_JOINTS, &_ve[0].position, GL_STATIC_DRAW);
-	glEnableVertexArrayAttrib(VAO_hand,0);
+	glEnableVertexArrayAttrib(VAO_hand, 0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(JointPositionSpeed), (void*)offsetof(JointPositionSpeed, position));
 	glBindVertexArray(0);
-	
 
 	while (GLenum err = glGetError() != GL_NO_ERROR) {
 		std::cerr << err;
@@ -498,11 +673,11 @@ bool MainLoop() {
 	glBindVertexArray(VAO_hand_line);
 	glGenBuffers(1, &VBO_hand_line);
 	glBindBuffer(GL_ARRAY_BUFFER, VBO_hand_line);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(JointPositionSpeed)*6, &_ve[0].position, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(JointPositionSpeed) * 6, &_ve[0].position, GL_STATIC_DRAW);
 	glEnableVertexArrayAttrib(VAO_hand_line, 0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(JointPositionSpeed), (void*)offsetof(JointPositionSpeed, position));
 	glBindVertexArray(0);
-
+#endif // OVRRS
 
 #ifdef AR_TEST
 	GLuint VAO_ar, VBO_ar;
@@ -610,8 +785,8 @@ bool MainLoop() {
 	glClearColor(0, 0, 0, 0);
 	bool quit = false;
 	if (isLoadModels) {
-		GLfloat scale = (2 * PROPORTION * EYELOCATION * MINFOVTANGENT) / (model_width + PROPORTION*model_thickness*MINFOVTANGENT);
-		GLfloat scale1 = (2 * PROPORTION * EYELOCATION * MINFOVTANGENT) / (model_height + PROPORTION*model_thickness*MINFOVTANGENT);
+		GLfloat scale = (2 * PROPORTION * EYELOCATION * MINFOVTANGENT) / (model_width + PROPORTION * model_thickness * MINFOVTANGENT);
+		GLfloat scale1 = (2 * PROPORTION * EYELOCATION * MINFOVTANGENT) / (model_height + PROPORTION * model_thickness * MINFOVTANGENT);
 		GLfloat scale2 = 0.5 * EYELOCATION / model_thickness;
 		scale = glm::min(glm::min(scale, scale1), scale2);
 		var light_dir = glm::normalize(glm::vec3(-1, 1, -1));
@@ -646,7 +821,6 @@ bool MainLoop() {
 			ovr_RecenterTrackingOrigin(session);
 		}
 		if (sstatus.IsVisible) {
-
 #ifdef CVCAP
 			capture >> frame;
 			cv::Mat flipmat;
@@ -687,49 +861,13 @@ bool MainLoop() {
 
 				var mat_model1 = glm::mat4(1);
 				var mat_view1 = glm::lookAt(glm::vec3(0, 0, 1), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+#ifdef OVRRS
 				glUseProgram(PRG_hand);
 				glUniformMatrix4fv(glGetUniformLocation(PRG_hand, "mat_model"), 1, false, glm::value_ptr(mat_model1));
 				glUniformMatrix4fv(glGetUniformLocation(PRG_hand, "mat_view"), 1, false, glm::value_ptr(mat_view1));
 				glUniformMatrix4fv(glGetUniformLocation(PRG_hand, "mat_projection"), 1, GL_TRUE, (float*)&proj.M[0]);
-				_ve = rsf->GetJointPoints();
-				//var _rotate = glm::rotate(-_ve[1].position.x, glm::vec3(0, 1, 0));
 				static GLuint time = 0;
-
-				/*if (isLog) {
-					if (time == 0) {
-						time = SDL_GetTicks();
-					}
-					if (rsf->GetLogCount() >= 1500) {
-						isLog = false;
-						time = SDL_GetTicks() - time;
-						std::cout << "Writing...(" << time << ")" << endl;
-						::WriteLogWithSpeed(rsf->GetLog_p(), rsf->GetLog_s());
-					}
-				}*/
-				//var _ts = rsf->GetJointPoints();
-				/*if (isLog) {
-					if (handcount < 3000) {
-						if (time == 0) {
-							time = SDL_GetTicks();
-						}
-						array<glm::vec3, 3> _tlog_p = { _ve[0].position,_ve[1].position,_ve[2].position };
-						array<glm::vec3, 3> _tlog_s = { _ve[0].speed,_ve[1].speed,_ve[2].speed };
-						handlog_p.push_back(_tlog_p);
-						handlog_s.push_back(_tlog_s);
-						std::cout << "Recording:" << handcount
-							<< "\t" << _ve[0].position.x
-							<< "\t" << _ve[0].position.y
-							<< "\t" << _ve[0].position.z
-							<< endl;
-						handcount += 1;
-					}
-					else if (handcount == 3000) {
-						handcount += 1;
-						time = SDL_GetTicks() - time;
-						std::cout << "Writing...(" << time << ")" << endl;
-						::WriteLogWithSpeed(handlog_p, handlog_s);
-					}
-				}*/
+				_ve = rsf->GetJointPoints();
 				glBindVertexArray(VAO_hand);
 				glBindBuffer(GL_ARRAY_BUFFER, VBO_hand);
 				glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(JointPositionSpeed)*MAX_NUMBER_OF_JOINTS, &_ve[0]);
@@ -780,35 +918,106 @@ bool MainLoop() {
 				glBindBuffer(GL_ARRAY_BUFFER, 0);
 				glBindVertexArray(0);
 				glUseProgram(0);
+#endif // OVRRS
+				_ve = listener.GetHandResult();
+				glUseProgram(PRG_leap);
+				glUniformMatrix4fv(glGetUniformLocation(PRG_leap, "mat_model"), 1, false, glm::value_ptr(mat_model1));
+				glUniformMatrix4fv(glGetUniformLocation(PRG_leap, "mat_view"), 1, false, glm::value_ptr(mat_view1));
+				glUniformMatrix4fv(glGetUniformLocation(PRG_leap, "mat_projection"), 1, GL_TRUE, (float*)&proj.M[0]);
+				static GLuint time = 0;
+				glBindVertexArray(VAO_hand);
+				glBindBuffer(GL_ARRAY_BUFFER, VBO_hand);
+				glLineWidth(10);
+				listener.Lock();
+				glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(Leap::Vector)*50, _ve);
+				listener.Unlock();
+				glLineWidth(1);
+				glDrawArrays(GL_LINES, 0, 50);
+				glBindBuffer(GL_ARRAY_BUFFER, 0);
+				glBindVertexArray(0);
+				glUseProgram(0);
 
-				if (isLock_current_position_derivative) {
-					primal_position = _ve[1].position;
-					primal_orientation = glm::vec3(-1, 1, 1) * (_ve[1].position - _ve[0].position);
-					isLock_current_position_derivative = false;
-				}
 				if (isLoadModels) {
 					switch (current_opr) {
+					case Operation::ROTATION_SWITCH:
+						if (listener.GetFistState()) {
+							cout << "Detected fist, ROTATION ON!" << endl;
+							current_opr = Operation::ROTATION;
+#ifdef OVRRS
+							primal_trkb_pos_imagecoord = ovrrs_fh::get_trackball_pos(rsf->GetHandCenterImageCoord());
+							primal_position = _ve[1].position;
+							primal_orientation = glm::vec3(-1, 1, 1) * (_ve[1].position - _ve[0].position);
+#endif // OVRRS
+
+							isLock_current_position_derivative = false;
+						}
+						break;
 					case Operation::ROTATION:
 					{
+						if (!listener.GetFistState()) {
+							cout << "Lost fist, ROTATION OFF!" << endl;
+							last_rotation = final_rotation;
+							current_rotation = glm::mat4(1);
+							current_opr = Operation::ROTATION_SWITCH;
+							break;
+						}
+#ifdef OVRRS
 						var _orientation = _ve[1].position - _ve[0].position;
 						_orientation = glm::vec3(-1, 1, 1) * _orientation;
-						//current_rotation = SDLGL::GetRotationMatrixFromVec3(primal_orientation, _orientation) * last_rotation;
-						current_rotation = SDLGL::GetRotationMatrixFromVec3(primal_orientation, _orientation);
+						current_rotation = CalculateRotation_TrackBall(rsf->GetHandCenterImageCoord());
+#endif // OVRRS
 						final_rotation = current_rotation * last_rotation;
 						break;
 					}
+					case Operation::SCALE_SWITCH:
+						if (listener.GetFistState()) {
+							cout << "Detected fist, SCALE ON!" << endl;
+							current_opr = Operation::SCALE;
+#ifdef OVRRS
+							primal_position = _ve[1].position;
+							primal_orientation = glm::vec3(-1, 1, 1) * (_ve[1].position - _ve[0].position);
+#endif // OVRRS
+							isLock_current_position_derivative = false;
+						}
+						break;
 					case Operation::SCALE:
 					{
-						var _scale = GetScaling(glm::vec3(-1, 1, 1)*primal_position, glm::vec3(-1, 1, 1)*_ve[1].position);
-						current_scale = glm::scale(glm::vec3((_scale == 0) ? 1 : _scale));
+						if (!listener.GetFistState()) {
+							cout << "Lost fist, SCALE OFF!" << endl;
+							last_scale = final_scale;
+							current_scale = glm::mat4(1);
+							current_opr = Operation::SCALE_SWITCH;
+							break;
+						}
+#ifdef OVRRS
+						current_scale = CalculateScale(primal_position, glm::vec3(-1, 1, 1)*_ve[1].position);
+#endif // OVRRS
 						final_scale = current_scale * last_scale;
 						break;
 					}
+					case Operation::DISPLACEMENT_SWITCH:
+						if (listener.GetFistState()) {
+							cout << "Detected fist, DISPLACEMENT ON!" << endl;
+							current_opr = Operation::DISPLACEMENT;
+#ifdef OVRRS
+							primal_position = _ve[1].position;
+							primal_orientation = glm::vec3(-1, 1, 1) * (_ve[1].position - _ve[0].position);
+#endif // OVRRS
+							isLock_current_position_derivative = false;
+						}
+						break;
 					case Operation::DISPLACEMENT:
 					{
-						var _nc = glm::vec3(-1,1,1) * GetNormalizedCameraSpaceIncrement(primal_position, _ve[1].position);
-						var _wi = GetWorldSpaceIncrement(_nc);
-						current_translate = translate_coefficent * glm::translate(_wi);
+						if (!listener.GetFistState()) {
+							cout << "Lost fist, DISPLACEMENT OFF!" << endl;
+							last_translate = final_translate;
+							current_translate = glm::mat4(1);
+							current_opr = Operation::DISPLACEMENT_SWITCH;
+							break;
+						}
+#ifdef OVRRS
+						current_translate = CalculateDisplacement(primal_position, _ve[1].position);
+#endif // OVRRS
 						final_translate = current_translate * last_translate;
 						;
 						int i = 0;
@@ -817,7 +1026,7 @@ bool MainLoop() {
 					default:
 						break;
 					}
-					final_model = final_scale * final_rotation * final_translate;
+					final_model = final_translate * final_scale * final_rotation;
 					//glm::mat4 model = glm::translate(glm::vec3(0, 0, loop / 10.f));
 					glUseProgram(PRG_castle);
 					for (int _n = 0; _n < objfiles.size(); _n++) {
@@ -986,23 +1195,38 @@ void s(ovrrs_tc *_r) {
 	_r->Start();
 }
 
-void s_fh(ovrrs_fh* _f) {
-	_f->Start();
+void s_fh() {
+	rsf->Start();
+}
+
+void s_ifly() {
+	cMSP_init_userbnf("../../ovr.bnf");
+	cMSP_SetiFlyResultCallBack(iFlyJsonCallback);
+	cMSP_run_asr_without_interruption();
+	cout << "iFlyCommand Thread Destroy" << endl;
 }
 
 int main(int argc, char* argv[]) {
-	rsf = new ovrrs_fh();
-	thread rsthrd = thread(s_fh, rsf);
+	
+	controller.addListener(listener);
+	listener.SetFactor(Leap::Vector(0.01, 0.01, 0.01));
+	listener.SetTransfomationMatrix(Leap::Matrix(Leap::Vector(1, 0, 0), Leap::Vector(0, 0, -1), Leap::Vector(0, -1, 0)));
+#ifdef OVRRS
+	rsf = std::make_unique<ovrrs_fh>();
+	thread rsthrd = thread(s_fh);
+#endif // OVRRS
+	thread iflythrd = thread(s_ifly);
 	kal = new KalmanFilter<glm::vec3>(glm::vec3(1.f, 1.f, 1.f), glm::vec3(1.f, 1.f, 1.f), glm::vec3(1.f, 1.f, 1.f));
 	//Use this to wait for init a glm*, DANGEROUS!!!!@
 	Sleep(100);
+
 #ifdef CVCAP
 	capture.open(0);
 	if (!capture.isOpened()) {
 		std::cout << "capture failed" << endl;
 		system("pause");
 		return -1;
-	}
+}
 #endif // CVCAP
 
 #ifndef CVCAP
@@ -1018,10 +1242,51 @@ int main(int argc, char* argv[]) {
 	var result = ovr_Initialize(&initParams);
 	VALIDATE(OVR_SUCCESS(result), "Failed to initialize libOVR.");
 	MainLoop();
+#ifdef OVRRS
 	rsf->Stop();
 	rsthrd.join();
-	IMG_Quit();
-	SDL_Quit();
+#endif // OVRRS
+	iflythrd.join();
+	Quit();
 	//system("pause");
 	return 0;
+}
+
+glm::mat4 CalculateRotation(glm::vec3 src,glm::vec3 dest) {
+	var _r = SDLGL::GetRotationMatrixFromVec3(src, dest);
+	return _r;
+}
+
+glm::mat4 CalculateRotation_TrackBall(GLfloat x, GLfloat y) {
+	var _qd = ovrrs_fh::get_trackball_pos(x,y);
+	var _qr = ovrrs_fh::get_trackball_quat(primal_trkb_pos_imagecoord, _qd);
+	var _r = glm::toMat4(_qr);
+	return _r;
+}
+
+glm::mat4 CalculateRotation_TrackBall(glm::vec2 dest) {
+	var _qd = ovrrs_fh::get_trackball_pos(dest);
+	var _qr = ovrrs_fh::get_trackball_quat(primal_trkb_pos_imagecoord, _qd);
+	var _r = glm::toMat4(_qr);
+	return _r;
+}
+
+glm::mat4 CalculateDisplacement(glm::vec3 src, glm::vec3 dest) {
+	var _nc = glm::vec3(-1, 1, 1) * GetNormalizedCameraSpaceIncrement(src, dest);
+	var _wi = GetWorldSpaceIncrement(_nc);
+	var _r = translate_coefficent * glm::translate(_wi);
+	return _r;
+}
+
+glm::mat4 CalculateScale(glm::vec3 src, glm::vec3 dest) {
+	var _scale = GetScaling(src, dest);
+	var _r = glm::scale(glm::vec3((_scale == 0) ? 1 : _scale));
+	return _r;
+}
+
+void Quit() {
+	cMSP_quit();
+	controller.removeListener(listener);
+	IMG_Quit();
+	SDL_Quit();
 }
