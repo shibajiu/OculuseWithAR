@@ -165,11 +165,8 @@ private:
 	Tree<PointData>* skeletontree;
 	PXCHandData* handdata;
 	bool righthand = false, lefthand = false;
-	//vec3* jointpoints=new vec3[MAX_NUMBER_OF_JOINTS];
 	JointPositionSpeed *jointpoints_t = new JointPositionSpeed[MAX_NUMBER_OF_JOINTS];
-
 	void copyJointToPoint(PointData & dst, const PXCHandData::JointData & src);
-	//void copyJointTopoint()
 
 public:
 	HandsModel(PXCHandData*, ovrrs_fh*);

@@ -11,8 +11,6 @@ in VS_OUT{
 }fs_in;
 
 void main(){
-	//color=vec4(model_color,1);
-	//color=vec4(0.7,0.1,0.2,1);
     vec3 _color = model_color;
 
     vec3 ambient = 0.1*_color;

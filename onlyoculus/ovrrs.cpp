@@ -141,8 +141,6 @@ void ovrrs_fh::init() {
 	var config = hand->CreateActiveConfiguration();
 	config->EnableStabilizer(true);
 	config->SubscribeAlert(alert);
-	//config->EnableJointSpeed(PXCHandData::JointType::JOINT_WRIST, PXCHandData::JointSpeedType::JOINT_SPEED_AVERAGE, 0);
-	//config->EnableJointSpeed(PXCHandData::JointType::JOINT_CENTER, PXCHandData::JointSpeedType::JOINT_SPEED_AVERAGE, 0);
 	config->SetTrackingMode(PXCHandData::TrackingModeType::TRACKING_MODE_FULL_HAND);
 	config->EnableSegmentationImage(false);
 	config->EnableTrackedJoints(true);
@@ -430,6 +428,7 @@ void HandsModel::copyJointToPoint(PointData & dst, const PXCHandData::JointData 
 }
 
 void PXCAPI ovrHandAlertHandler::OnFiredAlert(const PXCHandData::AlertData & _d) {
+	_d.label;
 	return;
 }
 

@@ -1,8 +1,12 @@
 #ifndef _OVR_LM_H_
 #define _OVR_LM_H_
 #pragma once
+
 #include <Leap.h>
 #include <mutex>
+#include <glm/gtx/quaternion.hpp>
+#include <glm/glm.hpp>
+
 class SampleListener;
 class LP_HandResult {
 private:
@@ -13,29 +17,13 @@ private:
 	Leap::Matrix transformation;
 	friend class SampleListener;
 public:
-	LP_HandResult():wrist(), factor(1,1,1),transformation(){
-		for (int i = 0; i < 40; ++i)
-			bones[i] = Leap::Vector();
-	}
+	LP_HandResult();
 
-	void SetFactor(Leap::Vector v) { factor = v; }
-
-	void SetTransfomationMatrix(Leap::Matrix m) { transformation = m; }
-
-	void SetWrist(Leap::Vector wrist) {
-		this->wrist = wrist;
-	}
-
-	void SetBone(int finger, int bone, Leap::Vector* boneV) {
-		this->bones[2 * (finger * 4 + bone)] = boneV[0];
-		this->bones[2 * (finger * 4 + bone) + 1] = boneV[1];
-	}
-
-	void SetBone(int finger, int bone, Leap::Vector boneS, Leap::Vector boneE) {
-		this->bones[2 * (finger * 4 + bone)] = boneS;
-		this->bones[2 * (finger * 4 + bone) + 1] = boneE;
-	}
-
+	void SetFactor(Leap::Vector v);
+	void SetTransfomationMatrix(Leap::Matrix m);
+	void SetWrist(Leap::Vector wrist);
+	void SetBone(int finger, int bone, Leap::Vector* boneV);
+	void SetBone(int finger, int bone, Leap::Vector boneS, Leap::Vector boneE);
 	Leap::Vector* toVectors();
 };
 
@@ -50,9 +38,7 @@ private:
 	Leap::Vector palm;
 	Leap::Vector factor = Leap::Vector(1, 1, 1);
 	Leap::Matrix transformation = Leap::Matrix();
-
 	void setFistState(bool);
-
 public:
 	virtual void onInit(const Leap::Controller&);
 	virtual void onConnect(const Leap::Controller&);
@@ -68,14 +54,16 @@ public:
 	virtual void onDeviceFailure(const Leap::Controller&);
 	virtual void onLogMessage(const Leap::Controller&, Leap::MessageSeverity severity, int64_t timestamp, const char* msg);
 	Leap::Vector* GetHandResult();
-	Leap::Vector GetPalmPosition() { return transformation*(palm*factor); }
-	void SetTransfomationMatrix(Leap::Matrix m) { transformation = m; _lr.SetTransfomationMatrix(m); }
-	void SetLogState(bool _l) { isLog = _l; }
-	bool GetFistState() const { return isFist; }
-	void Lock() { result_lock.lock(); }
-	void Unlock() { result_lock.unlock(); }
-	void TurnOffFist() { isFist = false; }
-	void SetFactor(Leap::Vector v) { factor = v; _lr.SetFactor(v); }
+	Leap::Vector GetPalmPosition();
+	void SetTransfomationMatrix(Leap::Matrix m);
+	void SetLogState(bool _l);
+	bool GetFistState() const;
+	void Lock();
+	void Unlock();
+	void TurnOffFist();
+	void SetFactor(Leap::Vector v);
+	glm::vec3 get_trackball_pos(float x, float y);
+	glm::quat get_trackball_quat(glm::vec3 _s, glm::vec3 _d);
 };
 
 #endif // !_OVR_LM_H_

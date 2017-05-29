@@ -176,6 +176,70 @@ Leap::Vector* SampleListener::GetHandResult() {
 	return _lr.toVectors(); 
 }
 
+Leap::Vector SampleListener::GetPalmPosition() { 
+	return transformation*(palm*factor);
+}
+
+void SampleListener::SetTransfomationMatrix(Leap::Matrix m) { 
+	transformation = m;
+	_lr.SetTransfomationMatrix(m); 
+}
+
+void SampleListener::SetLogState(bool _l) { 
+	isLog = _l; 
+}
+
+bool SampleListener::GetFistState() const {
+	return isFist;
+}
+
+void SampleListener::Lock() { 
+	result_lock.lock(); 
+}
+
+void SampleListener::Unlock() {
+	result_lock.unlock();
+}
+
+void SampleListener::TurnOffFist() {
+	isFist = false;
+}
+
+void SampleListener::SetFactor(Leap::Vector v) {
+	factor = v; 
+	_lr.SetFactor(v); 
+}
+
+glm::vec3 SampleListener::get_trackball_pos(float x, float y) {
+	var _te = x * x + y * y;
+	return glm::vec3();
+}
+
+glm::quat SampleListener::get_trackball_quat(glm::vec3 _s, glm::vec3 _d) {
+	return glm::quat();
+}
+
+LP_HandResult::LP_HandResult():wrist(), factor(1, 1, 1), transformation() {
+	for (int i = 0; i < 40; ++i)
+		bones[i] = Leap::Vector();
+}
+
+void LP_HandResult::SetFactor(Leap::Vector v) { factor = v; }
+
+void LP_HandResult::SetTransfomationMatrix(Leap::Matrix m) { transformation = m; }
+
+void LP_HandResult::SetWrist(Leap::Vector wrist) {
+	this->wrist = wrist;
+}
+void LP_HandResult::SetBone(int finger, int bone, Leap::Vector * boneV) {
+	this->bones[2 * (finger * 4 + bone)] = boneV[0];
+	this->bones[2 * (finger * 4 + bone) + 1] = boneV[1];
+}
+
+void LP_HandResult::SetBone(int finger, int bone, Leap::Vector boneS, Leap::Vector boneE) {
+	this->bones[2 * (finger * 4 + bone)] = boneS;
+	this->bones[2 * (finger * 4 + bone) + 1] = boneE;
+}
 Leap::Vector * LP_HandResult::toVectors() {
 	for (int f = 0; f < 5; ++f) {
 		result[f * 10] = transformation * (this->wrist * factor);

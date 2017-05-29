@@ -1,7 +1,11 @@
-﻿  onlyoculus.cpp
-d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(498): warning C4838: conversion from 'double' to 'int' requires a narrowing conversion
-d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(498): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
-d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(1212): warning C4305: 'argument': truncation from 'double' to 'float'
+﻿  ovrlm.cpp
+  Generating Code...
+  Compiling...
+  onlyoculus.cpp
+d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(502): warning C4838: conversion from 'double' to 'int' requires a narrowing conversion
+d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(502): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+d:\myprojects\onlyoculus\onlyoculus\onlyoculus.cpp(1289): warning C4305: 'argument': truncation from 'double' to 'float'
+  Generating Code...
   onlyoculus.vcxproj -> D:\MyProjects\onlyoculus\Debug\onlyoculus.exe
   onlyoculus.vcxproj -> D:\MyProjects\onlyoculus\Debug\onlyoculus.pdb (Full PDB)
   D:\Projects\LeapDeveloperKit_3.2.0+45899_win\LeapDeveloperKit_3.2.0+45899_win\LeapSDK\lib\x86\Leap.dll

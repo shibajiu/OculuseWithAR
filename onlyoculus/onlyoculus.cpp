@@ -41,6 +41,7 @@
 #define DOWNTANGENT 1.33160317
 
 #define JSTEST
+#define OVRLM
 
 using namespace std;
 
@@ -207,8 +208,6 @@ static int Compare(const ovrGraphicsLuid& lhs, const ovrGraphicsLuid& rhs) {
 
 void iFlyJsonCallback(const char * result) {
 	string _r(result);
-	//printf_s(U2G(result));
-	vector<string> vecStr;
 	stringstream stream(_r);
 	boost::property_tree::ptree pt, p1, p2, p3, p4;;
 	boost::property_tree::read_json<boost::property_tree::ptree>(stream, pt);
@@ -354,7 +353,12 @@ void SDL_Handel_KeyEvent(SDL_Keysym* keysys) {
 			std::cout << "Already in Display Mode" << endl;
 			break;
 		}
+#ifdef OVRRS
 		rsf->TurnOffFist();
+#endif // OVRRS
+#ifdef OVRLM
+		listener.TurnOffFist();
+#endif // OVRLM
 		primal_position_normalized = glm::vec3(0);
 		isLock_current_position = false;
 		last_opr = current_opr;
@@ -579,7 +583,7 @@ bool MainLoop() {
 	if (isLoadModels) {
 		//vector<A_model> models(objfiles.size());
 		bool _isFirstMax = true;
-		for (int i = 0; i < /*objfiles.size()*/3; ++i) {
+		for (int i = 0; i < objfiles.size(); ++i) {
 			var _objname = objfiles[i].substr(objfiles[i].find_last_of('\\') + 1);
 			int _idx;
 			sscanf_s(_objname.c_str(), "%*6s%d%*s", &_idx);
@@ -636,6 +640,7 @@ bool MainLoop() {
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 	glBindVertexArray(0);
 
+#ifdef OVRLM
 	var _ve = listener.GetHandResult();
 	GLuint VBO_hand, VAO_hand;
 	//var p = s.GetHandPos_sdl();
@@ -643,7 +648,7 @@ bool MainLoop() {
 	glBindVertexArray(VAO_hand);
 	glGenBuffers(1, &VBO_hand);
 	glBindBuffer(GL_ARRAY_BUFFER, VBO_hand);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(Leap::Vector)*50, _ve, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(Leap::Vector) * 50, _ve, GL_STATIC_DRAW);
 	glEnableVertexArrayAttrib(VAO_hand, 0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(Leap::Vector), (void*)nullptr);
 	glBindVertexArray(0);
@@ -651,6 +656,8 @@ bool MainLoop() {
 	while (GLenum err = glGetError() != GL_NO_ERROR) {
 		std::cerr << err;
 	}
+
+#endif // OVRLM
 
 #ifdef OVRRS
 	var _ve = rsf->GetJointPoints();
@@ -919,6 +926,7 @@ bool MainLoop() {
 				glBindVertexArray(0);
 				glUseProgram(0);
 #endif // OVRRS
+#ifdef OVRLM
 				_ve = listener.GetHandResult();
 				glUseProgram(PRG_leap);
 				glUniformMatrix4fv(glGetUniformLocation(PRG_leap, "mat_model"), 1, false, glm::value_ptr(mat_model1));
@@ -936,11 +944,18 @@ bool MainLoop() {
 				glBindBuffer(GL_ARRAY_BUFFER, 0);
 				glBindVertexArray(0);
 				glUseProgram(0);
-
+#endif //OVRLM
 				if (isLoadModels) {
 					switch (current_opr) {
 					case Operation::ROTATION_SWITCH:
+#ifdef OVRLM
 						if (listener.GetFistState()) {
+
+#endif // OVRLM
+#ifdef OVRRS
+							if (rsf->GetFistState()) {
+#endif // OVRRS
+
 							cout << "Detected fist, ROTATION ON!" << endl;
 							current_opr = Operation::ROTATION;
 #ifdef OVRRS
@@ -948,13 +963,25 @@ bool MainLoop() {
 							primal_position = _ve[1].position;
 							primal_orientation = glm::vec3(-1, 1, 1) * (_ve[1].position - _ve[0].position);
 #endif // OVRRS
+#ifdef OVRLM
+							var _pos = listener.GetPalmPosition();
+							primal_trkb_pos_imagecoord = ovrrs_fh::get_trackball_pos(_pos.x,_pos.y);
+							primal_position = glm::vec3(_pos.x, _pos.y, _pos.z);
+#endif // OVRLM
+
 
 							isLock_current_position_derivative = false;
 						}
 						break;
 					case Operation::ROTATION:
 					{
+#ifdef OVRLM
 						if (!listener.GetFistState()) {
+
+#endif // OVRLM
+#ifdef OVRRS
+							if (!rsf->GetFistState()) {
+#endif // OVRRS							
 							cout << "Lost fist, ROTATION OFF!" << endl;
 							last_rotation = final_rotation;
 							current_rotation = glm::mat4(1);
@@ -966,24 +993,46 @@ bool MainLoop() {
 						_orientation = glm::vec3(-1, 1, 1) * _orientation;
 						current_rotation = CalculateRotation_TrackBall(rsf->GetHandCenterImageCoord());
 #endif // OVRRS
+#ifdef OVRLM
+						var _pos = listener.GetPalmPosition();
+						current_rotation = CalculateRotation_TrackBall(_pos.x, _pos.y);
+#endif // OVRLM
+
 						final_rotation = current_rotation * last_rotation;
 						break;
 					}
 					case Operation::SCALE_SWITCH:
+#ifdef OVRLM
 						if (listener.GetFistState()) {
-							cout << "Detected fist, SCALE ON!" << endl;
+
+#endif // OVRLM
+#ifdef OVRRS
+							if (rsf->GetFistState()) {
+#endif // OVRRS
+								cout << "Detected fist, SCALE ON!" << endl;
 							current_opr = Operation::SCALE;
 #ifdef OVRRS
 							primal_position = _ve[1].position;
 							primal_orientation = glm::vec3(-1, 1, 1) * (_ve[1].position - _ve[0].position);
 #endif // OVRRS
+#ifdef OVRLM
+							var _pos = listener.GetPalmPosition();
+							primal_position = glm::vec3(_pos.x, _pos.y, _pos.z);
+#endif // OVRLM
+
 							isLock_current_position_derivative = false;
 						}
 						break;
 					case Operation::SCALE:
 					{
+#ifdef OVRLM
 						if (!listener.GetFistState()) {
-							cout << "Lost fist, SCALE OFF!" << endl;
+
+#endif // OVRLM
+#ifdef OVRRS
+							if (!rsf->GetFistState()) {
+#endif // OVRRS							
+								cout << "Lost fist, SCALE OFF!" << endl;
 							last_scale = final_scale;
 							current_scale = glm::mat4(1);
 							current_opr = Operation::SCALE_SWITCH;
@@ -992,24 +1041,46 @@ bool MainLoop() {
 #ifdef OVRRS
 						current_scale = CalculateScale(primal_position, glm::vec3(-1, 1, 1)*_ve[1].position);
 #endif // OVRRS
+#ifdef OVRLM
+						var _pos = listener.GetPalmPosition();
+						current_scale = CalculateScale(primal_position, glm::vec3(_pos.x, _pos.y, _pos.z));
+#endif // OVRLM
+
 						final_scale = current_scale * last_scale;
 						break;
 					}
 					case Operation::DISPLACEMENT_SWITCH:
+#ifdef OVRLM
 						if (listener.GetFistState()) {
-							cout << "Detected fist, DISPLACEMENT ON!" << endl;
+
+#endif // OVRLM
+#ifdef OVRRS
+							if (rsf->GetFistState()) {
+#endif // OVRRS
+								cout << "Detected fist, DISPLACEMENT ON!" << endl;
 							current_opr = Operation::DISPLACEMENT;
 #ifdef OVRRS
 							primal_position = _ve[1].position;
 							primal_orientation = glm::vec3(-1, 1, 1) * (_ve[1].position - _ve[0].position);
 #endif // OVRRS
+#ifdef OVRLM
+							var _pos = listener.GetPalmPosition();
+							primal_position = glm::vec3(_pos.x, _pos.y, _pos.z);
+#endif // OVRLM
+
 							isLock_current_position_derivative = false;
 						}
 						break;
 					case Operation::DISPLACEMENT:
 					{
+#ifdef OVRLM
 						if (!listener.GetFistState()) {
-							cout << "Lost fist, DISPLACEMENT OFF!" << endl;
+
+#endif // OVRLM
+#ifdef OVRRS
+							if (!rsf->GetFistState()) {
+#endif // OVRRS							
+								cout << "Lost fist, DISPLACEMENT OFF!" << endl;
 							last_translate = final_translate;
 							current_translate = glm::mat4(1);
 							current_opr = Operation::DISPLACEMENT_SWITCH;
@@ -1018,6 +1089,11 @@ bool MainLoop() {
 #ifdef OVRRS
 						current_translate = CalculateDisplacement(primal_position, _ve[1].position);
 #endif // OVRRS
+#ifdef OVRLM
+						var _pos = listener.GetPalmPosition();
+						current_translate = CalculateDisplacement(primal_position, glm::vec3(_pos.x, _pos.y, _pos.z));
+#endif // OVRLM
+
 						final_translate = current_translate * last_translate;
 						;
 						int i = 0;
@@ -1208,9 +1284,12 @@ void s_ifly() {
 
 int main(int argc, char* argv[]) {
 	
+#ifdef OVRLM
 	controller.addListener(listener);
 	listener.SetFactor(Leap::Vector(0.01, 0.01, 0.01));
 	listener.SetTransfomationMatrix(Leap::Matrix(Leap::Vector(1, 0, 0), Leap::Vector(0, 0, -1), Leap::Vector(0, -1, 0)));
+
+#endif // OVRLM
 #ifdef OVRRS
 	rsf = std::make_unique<ovrrs_fh>();
 	thread rsthrd = thread(s_fh);
@@ -1272,8 +1351,13 @@ glm::mat4 CalculateRotation_TrackBall(glm::vec2 dest) {
 }
 
 glm::mat4 CalculateDisplacement(glm::vec3 src, glm::vec3 dest) {
+#ifdef OVRRS
 	var _nc = glm::vec3(-1, 1, 1) * GetNormalizedCameraSpaceIncrement(src, dest);
 	var _wi = GetWorldSpaceIncrement(_nc);
+#endif // OVRRS
+#ifdef OVRLM
+	var _wi = dest - src;
+#endif // OVRLM
 	var _r = translate_coefficent * glm::translate(_wi);
 	return _r;
 }
